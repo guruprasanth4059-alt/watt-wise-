@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build artifacts
+dist/
+build/
+.tmp/
+*.tsbuildinfo
+
+# Environment variables & local secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+server/.env
+
+# Local database & uploads
+data/*.db
+data/*.db-wal
+data/*.db-shm
+server/data/*.db
+server/data/*.db-wal
+server/data/*.db-shm
+server/uploads/*
+!server/uploads/.gitkeep
+uploads/*
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Editor & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
