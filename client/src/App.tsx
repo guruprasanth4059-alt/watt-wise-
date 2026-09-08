@@ -41,6 +41,8 @@ const getNormalizedPath = (): string => {
   let p = window.location.pathname || '/';
   // Strip repository subpath if hosted on GitHub Pages (e.g. /watt-wise- or /watt-wise)
   p = p.replace(/^\/watt-wise-?/, '');
+  // Strip /docs prefix if served from docs folder
+  p = p.replace(/^\/docs\/?/, '/');
   if (!p || p === '') p = '/';
   return p;
 };
