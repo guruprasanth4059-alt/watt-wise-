@@ -557,8 +557,12 @@ export function getNearRealTimeEnergySummary(societyId: string): RealTimeSummary
 export function getDataReconciliation(societyId: string): {
   billKwh: number;
   meterKwh: number;
+  discomBillTotalKwh: number;
+  smartMeterTotalKwh: number;
   differencePercent: number;
   isFlagged: boolean;
+  hasComparison: boolean;
+  reconciliationStatus: string;
 } {
   // Get latest verified utility bill
   const latestBill = queryOne<Bill>(
@@ -567,7 +571,16 @@ export function getDataReconciliation(societyId: string): {
   );
 
   if (!latestBill) {
-    return { billKwh: 0, meterKwh: 0, differencePercent: 0, isFlagged: false };
+    return {
+      billKwh: 0,
+      meterKwh: 0,
+      discomBillTotalKwh: 0,
+      smartMeterTotalKwh: 0,
+      differencePercent: 0,
+      isFlagged: false,
+      hasComparison: false,
+      reconciliationStatus: 'matched'
+    };
   }
 
   // Sum interval readings for the same month period (e.g. '2026-03')

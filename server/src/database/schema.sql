@@ -307,6 +307,151 @@ CREATE TABLE IF NOT EXISTS tariffs (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
+-- ==========================================
+-- PHASE 4: PREDICTIVE ENERGY INTELLIGENCE
+-- ==========================================
+
+CREATE TABLE IF NOT EXISTS forecast_runs (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    horizon TEXT NOT NULL, -- next_day, next_7d, next_30d, monthly
+    target_period TEXT NOT NULL,
+    predicted_kwh REAL NOT NULL,
+    range_min_kwh REAL NOT NULL,
+    range_max_kwh REAL NOT NULL,
+    predicted_cost REAL NOT NULL,
+    model_type TEXT NOT NULL, -- moving_avg, seasonal_baseline, trend_aware, ml_regression
+    model_version TEXT DEFAULT 'v4.1.0',
+    confidence TEXT DEFAULT 'medium', -- low, medium, high
+    coverage_months INTEGER DEFAULT 0,
+    error_mape REAL DEFAULT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS forecast_predictions (
+    id TEXT PRIMARY KEY,
+    forecast_run_id TEXT NOT NULL REFERENCES forecast_runs(id) ON DELETE CASCADE,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    timestamp TEXT NOT NULL,
+    predicted_kwh REAL NOT NULL,
+    range_min_kwh REAL,
+    range_max_kwh REAL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS forecast_metrics (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    model_type TEXT NOT NULL,
+    period TEXT NOT NULL,
+    mae REAL DEFAULT 0,
+    mape REAL DEFAULT 0,
+    rmse REAL DEFAULT 0,
+    actual_kwh REAL,
+    predicted_kwh REAL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS predictive_anomalies (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    meter_id TEXT REFERENCES meters(id) ON DELETE SET NULL,
+    pattern_type TEXT NOT NULL, -- baseload_creep, pump_runtime_extension, recurring_peak_shift, degradation_pattern
+    risk_score TEXT NOT NULL, -- low, medium, high, critical
+    observed_change TEXT NOT NULL,
+    historical_comparison TEXT NOT NULL,
+    expected_future_impact TEXT NOT NULL,
+    confidence TEXT DEFAULT 'medium',
+    recommended_action TEXT NOT NULL,
+    status TEXT DEFAULT 'new', -- new, acknowledged, investigating, resolved, dismissed
+    assigned_user TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS energy_opportunities (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    meter_id TEXT REFERENCES meters(id) ON DELETE SET NULL,
+    category TEXT NOT NULL, -- lighting, water_pumps, elevators, hvac, clubhouse, tariff_optimization, scheduling, maintenance
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    evidence TEXT NOT NULL,
+    estimated_impact_kwh REAL NOT NULL,
+    estimated_impact_inr REAL NOT NULL,
+    confidence TEXT DEFAULT 'medium',
+    priority TEXT DEFAULT 'medium', -- high, medium, low
+    suggested_action TEXT NOT NULL,
+    owner TEXT,
+    status TEXT DEFAULT 'identified', -- identified, under_review, in_progress, implemented, dismissed
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS scenario_runs (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    scenario_type TEXT NOT NULL, -- pump_schedule, led_retrofit, solar_offset, tariff_shift
+    parameters TEXT DEFAULT '{}', -- JSON input parameters
+    estimated_kwh_monthly REAL NOT NULL,
+    estimated_cost_monthly REAL NOT NULL,
+    payback_months REAL,
+    confidence TEXT DEFAULT 'medium',
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS equipment_health_signals (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    meter_id TEXT REFERENCES meters(id) ON DELETE CASCADE,
+    equipment_name TEXT NOT NULL,
+    signal_type TEXT NOT NULL, -- efficiency_degradation_proxy, excessive_runtime_creep, abnormal_idle_draw
+    severity TEXT DEFAULT 'medium', -- low, medium, high
+    confidence TEXT DEFAULT 'medium',
+    runtime_trend TEXT,
+    consumption_trend TEXT,
+    recommendation TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ai_copilot_sessions (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT DEFAULT 'Energy Copilot Session',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ai_copilot_messages (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES ai_copilot_sessions(id) ON DELETE CASCADE,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    role TEXT NOT NULL, -- user, assistant
+    content TEXT NOT NULL,
+    evidence TEXT DEFAULT '[]', -- JSON array of cited metrics
+    recommended_actions TEXT DEFAULT '[]', -- JSON array
+    links TEXT DEFAULT '[]', -- JSON array
+    confidence TEXT DEFAULT 'medium',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS committee_summaries (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    meeting_month TEXT NOT NULL,
+    top_issues TEXT DEFAULT '[]', -- JSON array
+    top_opportunities TEXT DEFAULT '[]', -- JSON array
+    financial_impact TEXT DEFAULT '{}', -- JSON object
+    action_items TEXT DEFAULT '[]', -- JSON array
+    executive_briefing TEXT NOT NULL,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
 -- Indexes for rapid society-isolated queries
 CREATE INDEX IF NOT EXISTS idx_users_society ON users(society_id);
 CREATE INDEX IF NOT EXISTS idx_meters_society ON meters(society_id);
@@ -328,3 +473,12 @@ CREATE INDEX IF NOT EXISTS idx_anomalies_meter ON anomalies(meter_id);
 CREATE INDEX IF NOT EXISTS idx_anomalies_status ON anomalies(status);
 CREATE INDEX IF NOT EXISTS idx_investigations_anomaly ON investigations(anomaly_id);
 CREATE INDEX IF NOT EXISTS idx_tariffs_society ON tariffs(society_id);
+CREATE INDEX IF NOT EXISTS idx_forecast_runs_society ON forecast_runs(society_id);
+CREATE INDEX IF NOT EXISTS idx_forecast_predictions_run ON forecast_predictions(forecast_run_id);
+CREATE INDEX IF NOT EXISTS idx_predictive_anomalies_soc ON predictive_anomalies(society_id);
+CREATE INDEX IF NOT EXISTS idx_energy_opportunities_soc ON energy_opportunities(society_id);
+CREATE INDEX IF NOT EXISTS idx_scenario_runs_soc ON scenario_runs(society_id);
+CREATE INDEX IF NOT EXISTS idx_equipment_health_soc ON equipment_health_signals(society_id);
+CREATE INDEX IF NOT EXISTS idx_copilot_messages_session ON ai_copilot_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_committee_summaries_soc ON committee_summaries(society_id);
+

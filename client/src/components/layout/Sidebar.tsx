@@ -15,7 +15,12 @@ import {
   ShieldCheck,
   AlertTriangle,
   LogOut,
-  X
+  X,
+  TrendingUp,
+  Bot,
+  SlidersHorizontal,
+  Target,
+  Briefcase
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Badge } from '../common/Badge';
@@ -37,6 +42,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, isOpe
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+    { label: 'Forecast', path: '/forecast', icon: TrendingUp, badge: 'P4' },
+    { label: 'AI Copilot', path: '/copilot', icon: Bot, badge: 'AI' },
+    { label: 'Scenarios', path: '/scenarios', icon: SlidersHorizontal },
+    { label: 'Opportunities', path: '/opportunities', icon: Target },
+    { label: 'Committee', path: '/committee', icon: Briefcase },
     { label: 'Energy', path: '/energy', icon: Zap },
     { label: 'Bills', path: '/bills', icon: Receipt },
     { label: 'Meters', path: '/meters', icon: Gauge },

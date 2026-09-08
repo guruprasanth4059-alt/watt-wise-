@@ -2,6 +2,12 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { db, initializeDatabase, execute, queryOne } from './db.js';
 import { SimulatedSmartMeterProvider } from '../services/providers/simulatedProvider.js';
+import { generateSocietyForecast } from '../services/forecasting/forecastingEngine.js';
+import { generateOpportunities } from '../services/opportunities.js';
+import { evaluatePredictiveAnomalies } from '../services/predictiveAnomalies.js';
+import { evaluateEquipmentHealth } from '../services/equipmentHealth.js';
+import { generateCommitteeBriefing } from '../services/committee.js';
+import { runScenarioSimulation } from '../services/scenarios.js';
 
 export function seedDatabase() {
   initializeDatabase();
@@ -11,7 +17,8 @@ export function seedDatabase() {
   if (existingSociety) {
     seedPhase2PilotData();
     seedPhase3SmartMeterData();
-    console.log('Database already seeded. Phase 2 pilot & Phase 3 smart meter attributes verified.');
+    seedPhase4PredictiveData();
+    console.log('Database already seeded. Phase 2, Phase 3, and Phase 4 predictive intelligence verified.');
     return;
   }
 
@@ -508,6 +515,36 @@ export function seedPhase3SmartMeterData() {
        )`,
       [societyId, pumpMeter?.id || 'meter-demo-02']
     );
+  }
+}
+
+export function seedPhase4PredictiveData() {
+  const society = queryOne<any>("SELECT id FROM societies WHERE name = 'Green Valley Residency'");
+  if (!society) return;
+  const societyId = society.id;
+
+  try {
+    generateOpportunities(societyId);
+    evaluatePredictiveAnomalies(societyId);
+    evaluateEquipmentHealth(societyId);
+    generateSocietyForecast(societyId).catch(() => {});
+    generateCommitteeBriefing(societyId).catch(() => {});
+
+    const existingScenarios = queryOne<any>("SELECT id FROM scenario_runs WHERE society_id = ?", [societyId]);
+    if (!existingScenarios) {
+      runScenarioSimulation(societyId, {
+        title: 'Water Pump Runtime Optimization (-1 hr/day)',
+        scenarioType: 'pump_schedule',
+        parameters: { hoursReducedPerDay: 1.0, pumpKwRating: 11.2, capitalCostInr: 12000 }
+      });
+      runScenarioSimulation(societyId, {
+        title: 'Basement & Perimeter Motion-Sensor LED Retrofit',
+        scenarioType: 'led_retrofit',
+        parameters: { fixtureCount: 140, oldWattage: 36, newWattage: 18, operatingHoursPerDay: 20, fixtureCostEach: 420 }
+      });
+    }
+  } catch (err) {
+    console.error('Failed to seed Phase 4 predictive data:', err);
   }
 }
 

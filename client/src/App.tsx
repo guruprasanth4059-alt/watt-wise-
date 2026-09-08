@@ -34,6 +34,13 @@ import { Settings } from './pages/settings/Settings';
 import { SubscriptionPage } from './pages/subscription/Subscription';
 import { AdminDashboard } from './pages/admin/Admin';
 
+// Phase 4 Predictive Pages
+import { Forecast } from './pages/forecast/Forecast';
+import { Copilot } from './pages/copilot/Copilot';
+import { Scenarios } from './pages/scenarios/Scenarios';
+import { Opportunities } from './pages/opportunities/Opportunities';
+import { CommitteeView } from './pages/committee/CommitteeView';
+
 const getNormalizedPath = (): string => {
   if (window.location.hash) {
     const hashPath = window.location.hash.replace(/^#/, '');
@@ -143,6 +150,16 @@ const AppContent: React.FC = () => {
     switch (currentPath) {
       case '/dashboard':
         return { component: <Dashboard onNavigate={navigate} />, title: 'Energy Dashboard' };
+      case '/forecast':
+        return { component: <Forecast />, title: 'Predictive Energy Forecasting' };
+      case '/copilot':
+        return { component: <Copilot onNavigate={navigate} />, title: 'AI Energy Copilot' };
+      case '/scenarios':
+        return { component: <Scenarios />, title: 'What-If Scenario Simulator' };
+      case '/opportunities':
+        return { component: <Opportunities />, title: 'Energy Opportunity Engine' };
+      case '/committee':
+        return { component: <CommitteeView />, title: 'Committee Decision Pack' };
       case '/energy':
         return { component: <Energy onNavigate={navigate} />, title: 'Energy Module' };
       case '/bills':

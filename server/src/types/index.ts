@@ -383,3 +383,149 @@ export interface JwtPayload {
   role: UserRole;
   societyId: string | null;
 }
+
+// ==========================================
+// PHASE 4: PREDICTIVE ENERGY INTELLIGENCE TYPES
+// ==========================================
+
+export type ForecastHorizon = 'next_day' | 'next_7d' | 'next_30d' | 'monthly';
+export type ForecastModelType = 'moving_avg' | 'seasonal_baseline' | 'trend_aware' | 'ml_regression';
+
+export interface ForecastRun {
+  id: string;
+  society_id: string;
+  horizon: ForecastHorizon;
+  target_period: string;
+  predicted_kwh: number;
+  range_min_kwh: number;
+  range_max_kwh: number;
+  predicted_cost: number;
+  model_type: ForecastModelType;
+  model_version: string;
+  confidence: 'low' | 'medium' | 'high';
+  coverage_months: number;
+  error_mape?: number | null;
+  created_at: string;
+}
+
+export interface PeakDemandForecast {
+  expectedPeakKw: number;
+  likelyTimeWindow: string;
+  likelyPeakDay: string;
+  exceedanceProbability: number; // 0-100%
+  riskLevel: 'low' | 'medium' | 'high';
+  potentialDrivers: string[];
+}
+
+export interface ForecastSummary {
+  status: 'ready' | 'insufficient_data';
+  message?: string;
+  nextDayKwh: number;
+  next7DaysKwh: number;
+  next30DaysKwh: number;
+  expectedMonthlyKwh: number;
+  rangeMinKwh: number;
+  rangeMaxKwh: number;
+  expectedMonthlyCost: number;
+  costTrend: 'increasing' | 'stable' | 'decreasing';
+  confidence: 'low' | 'medium' | 'high';
+  coverageMonths: number;
+  modelType: ForecastModelType;
+  modelVersion: string;
+  generatedAt: string;
+  peakForecast: PeakDemandForecast;
+  dailyPredictions: Array<{ date: string; predictedKwh: number; minKwh: number; maxKwh: number }>;
+}
+
+export interface PredictiveAnomaly {
+  id: string;
+  society_id: string;
+  meter_id?: string | null;
+  meter_name?: string | null;
+  pattern_type: 'baseload_creep' | 'pump_runtime_extension' | 'recurring_peak_shift' | 'degradation_pattern';
+  risk_score: 'low' | 'medium' | 'high' | 'critical';
+  observed_change: string;
+  historical_comparison: string;
+  expected_future_impact: string;
+  confidence: 'low' | 'medium' | 'high';
+  recommended_action: string;
+  status: 'new' | 'acknowledged' | 'investigating' | 'resolved' | 'dismissed';
+  assigned_user?: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface EnergyOpportunity {
+  id: string;
+  society_id: string;
+  meter_id?: string | null;
+  category: 'lighting' | 'water_pumps' | 'elevators' | 'hvac' | 'clubhouse' | 'tariff_optimization' | 'scheduling' | 'maintenance';
+  title: string;
+  description: string;
+  evidence: string;
+  estimated_impact_kwh: number;
+  estimated_impact_inr: number;
+  confidence: 'low' | 'medium' | 'high';
+  priority: 'high' | 'medium' | 'low';
+  suggested_action: string;
+  owner?: string | null;
+  status: 'identified' | 'under_review' | 'in_progress' | 'implemented' | 'dismissed';
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface ScenarioSimulation {
+  id: string;
+  society_id: string;
+  user_id?: string | null;
+  title: string;
+  scenario_type: 'pump_schedule' | 'led_retrofit' | 'solar_offset' | 'tariff_shift';
+  parameters: Record<string, any>;
+  estimated_kwh_monthly: number;
+  estimated_cost_monthly: number;
+  payback_months?: number | null;
+  confidence: 'low' | 'medium' | 'high';
+  notes?: string | null;
+  created_at: string;
+}
+
+export interface EquipmentHealthSignal {
+  id: string;
+  society_id: string;
+  meter_id: string;
+  equipment_name: string;
+  signal_type: 'efficiency_degradation_proxy' | 'excessive_runtime_creep' | 'abnormal_idle_draw';
+  severity: 'low' | 'medium' | 'high';
+  confidence: 'low' | 'medium' | 'high';
+  runtime_trend?: string | null;
+  consumption_trend?: string | null;
+  recommendation: string;
+  disclaimer: string;
+  created_at: string;
+}
+
+export interface AICopilotMessage {
+  id: string;
+  session_id: string;
+  society_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  evidence: Array<{ metric: string; value: string | number; comparison?: string }>;
+  recommended_actions: string[];
+  links: string[];
+  confidence: 'low' | 'medium' | 'high';
+  created_at: string;
+}
+
+export interface CommitteeBriefing {
+  id: string;
+  society_id: string;
+  meetingMonth: string;
+  topIssues: Array<{ title: string; severity: string; impact: string; owner: string }>;
+  topOpportunities: Array<{ title: string; category: string; monthlySavingsInr: number; priority: string }>;
+  financialImpact: { currentMonthlyEstimate: number; forecastedMonthEnd: number; potentialSavingsMonthly: number };
+  actionItems: Array<{ task: string; owner: string; deadline: string; status: string }>;
+  executiveBriefing: string;
+  generatedAt: string;
+}
+

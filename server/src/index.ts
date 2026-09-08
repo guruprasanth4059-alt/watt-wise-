@@ -26,6 +26,14 @@ import { pilotRouter } from './routes/pilot.js';
 import { auditRouter } from './routes/audit.js';
 import { anomaliesRouter } from './routes/anomalies.js';
 import { tariffsRouter } from './routes/tariffs.js';
+import { forecastRouter } from './routes/forecast.js';
+import { predictiveAnomaliesRouter } from './routes/predictiveAnomalies.js';
+import { opportunitiesRouter } from './routes/opportunities.js';
+import { scenariosRouter } from './routes/scenarios.js';
+import { equipmentHealthRouter } from './routes/equipmentHealth.js';
+import { benchmarksRouter } from './routes/benchmarks.js';
+import { copilotRouter } from './routes/copilot.js';
+import { committeeRouter } from './routes/committee.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -73,6 +81,14 @@ app.use('/api/pilot', pilotRouter);
 app.use('/api/audit-logs', auditRouter);
 app.use('/api/anomalies', anomaliesRouter);
 app.use('/api/tariffs', tariffsRouter);
+app.use('/api/forecast', forecastRouter);
+app.use('/api/predictive-anomalies', predictiveAnomaliesRouter);
+app.use('/api/opportunities', opportunitiesRouter);
+app.use('/api/scenarios', scenariosRouter);
+app.use('/api/equipment-health', equipmentHealthRouter);
+app.use('/api/benchmarks', benchmarksRouter);
+app.use('/api/copilot', copilotRouter);
+app.use('/api/committee', committeeRouter);
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {
