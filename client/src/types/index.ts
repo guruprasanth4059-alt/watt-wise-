@@ -613,3 +613,276 @@ export interface CommitteeBriefing {
   generatedAt: string;
 }
 
+// ==========================================
+// PHASE 5: ENERGY OPTIMIZATION & ASSETS TYPES
+// ==========================================
+
+export type AssetType = 'meter' | 'solar' | 'ev_charger' | 'battery' | 'pump' | 'hvac' | 'lighting' | 'elevator' | 'generator' | 'other';
+export type AssetStatus = 'active' | 'inactive' | 'maintenance' | 'unknown';
+
+export interface EnergyAsset {
+  id: string;
+  society_id: string;
+  meter_id?: string | null;
+  name: string;
+  asset_type: AssetType;
+  location?: string | null;
+  building?: string | null;
+  capacity?: number | null;
+  capacity_unit?: string | null;
+  installation_date?: string | null;
+  status: AssetStatus;
+  manufacturer?: string | null;
+  notes?: string | null;
+  data_source: 'manual' | 'smart_meter' | 'api';
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface EnergyFlowNode {
+  id: string;
+  name: string;
+  type: string;
+  capacity?: string;
+  status?: string;
+  powerKw?: number;
+  energyKwh?: number;
+  children?: EnergyFlowNode[];
+}
+
+export interface EnergyFlowMap {
+  gridImportKw: number;
+  solarGenerationKw: number;
+  batteryFlowKw: number;
+  totalCommonLoadKw: number;
+  nodes: EnergyFlowNode[];
+}
+
+export interface SolarSystem {
+  id: string;
+  society_id: string;
+  asset_id?: string | null;
+  name: string;
+  capacity_kwp: number;
+  panel_technology?: string;
+  inverter_capacity_kw?: number;
+  installation_date?: string;
+  status: string;
+  created_at: string;
+}
+
+export interface SolarMeasurement {
+  id: string;
+  society_id: string;
+  solar_system_id: string;
+  date: string;
+  generation_kwh: number;
+  self_consumed_kwh: number;
+  grid_exported_kwh: number;
+  peak_power_kw?: number;
+  is_estimated?: boolean;
+}
+
+export interface SolarSummary {
+  hasSolar: boolean;
+  systemCount: number;
+  totalCapacityKwp: number;
+  todayGenerationKwh: number;
+  monthGenerationKwh: number;
+  solarContributionPct: number;
+  selfConsumptionPct: number;
+  capacityUtilizationFactorPct: number;
+  generationPerKwp: number;
+  generationTrend: 'increasing' | 'stable' | 'decreasing';
+  deviationFromExpectedPct: number;
+  performanceStatus: 'normal' | 'attention_needed' | 'critical';
+  performanceAlert?: {
+    message: string;
+    deviationPct: number;
+    recommendedAction: string;
+  } | null;
+  forecastDailyKwh: number;
+  forecastMonthlyKwh: number;
+  recentDailyGeneration: Array<{ date: string; generationKwh: number; selfConsumedKwh: number; exportedKwh: number }>;
+}
+
+export interface SolarRoiSimulation {
+  systemCapacityKwp: number;
+  capexInr: number;
+  annualGenerationKwh: number;
+  annualSavingsInr: number;
+  annualOpexInr: number;
+  netAnnualBenefitInr: number;
+  simplePaybackYears: number;
+  twentyYearEstimatedBenefitInr: number;
+  assumptions: string[];
+}
+
+export interface EVCharger {
+  id: string;
+  society_id: string;
+  asset_id?: string | null;
+  name: string;
+  charger_type: string;
+  power_rating_kw: number;
+  location?: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface EVSession {
+  id: string;
+  society_id: string;
+  charger_id: string;
+  charger_name?: string;
+  start_time: string;
+  end_time: string;
+  energy_consumed_kwh: number;
+  peak_demand_kw?: number;
+  cost_inr?: number;
+  is_peak_window: boolean;
+}
+
+export interface EVOptimizationSummary {
+  hasEv: boolean;
+  chargerCount: number;
+  sessionsThisMonth: number;
+  monthlyEnergyKwh: number;
+  peakChargingWindow: string;
+  peakLoadContribution: 'low' | 'medium' | 'high';
+  peakOverlappedEnergyKwh: number;
+  potentialMonthlySavingsInr: number;
+  optimizationOpportunity: {
+    title: string;
+    description: string;
+    strategy: string;
+    estimatedImpact: string;
+    confidence: 'low' | 'medium' | 'high';
+  };
+}
+
+export interface StorageSimulationInput {
+  capacityKwh: number;
+  powerRatingKw: number;
+  roundTripEfficiencyPct?: number;
+  capexInr?: number;
+  operatingStrategy: 'peak_shaving' | 'solar_self_consumption' | 'tou_shifting';
+}
+
+export interface StorageSimulationResult {
+  capacityKwh: number;
+  powerRatingKw: number;
+  strategy: string;
+  potentialPeakReductionKw: number;
+  potentialGridEnergyOffsetKwhMonthly: number;
+  estimatedCostSavingsMonthlyInr: number;
+  estimatedAnnualSavingsInr: number;
+  estimatedPaybackYears: number | null;
+  confidence: 'low' | 'medium' | 'high';
+  notes: string;
+}
+
+export interface PeakManagementOverview {
+  currentDemandKw: number;
+  historicalPeakKw: number;
+  forecastPeakKw: number;
+  contractedThresholdKw: number;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  peakWindow: string;
+  majorContributors: Array<{ name: string; loadKw: number; percentage: number }>;
+  preventionRecommendations: string[];
+}
+
+export type ProjectCategory = 'solar' | 'led_retrofit' | 'pump_upgrade' | 'hvac_optimization' | 'ev_smart_charging' | 'battery_storage' | 'submetering';
+export type ProjectStatus = 'idea' | 'evaluating' | 'approved' | 'in_progress' | 'completed' | 'monitoring' | 'closed';
+
+export interface EnergyProject {
+  id: string;
+  society_id: string;
+  name: string;
+  category: ProjectCategory;
+  status: ProjectStatus;
+  priority: 'low' | 'medium' | 'high';
+  owner?: string | null;
+  estimated_cost_inr: number;
+  actual_cost_inr?: number;
+  estimated_annual_savings_kwh: number;
+  estimated_annual_savings_inr: number;
+  observed_annual_savings_kwh?: number;
+  observed_annual_savings_inr?: number;
+  estimated_payback_months?: number;
+  start_date?: string | null;
+  completion_date?: string | null;
+  notes?: string | null;
+  assumptions?: string[];
+  variance_percent?: number | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface EnergyPortfolioSummary {
+  annualEnergyKwh: number;
+  annualEnergyCostInr: number;
+  renewableGenerationKwh: number;
+  renewableContributionPct: number;
+  currentPeakKw: number;
+  contractedPeakKw: number;
+  evEnergyConsumedKwh: number;
+  activeProjectsCount: number;
+  potentialAnnualSavingsInr: number;
+  realizedAnnualSavingsInr: number;
+  totalInvestedCapexInr: number;
+  co2EmissionsTons: number;
+  co2SavedTons: number;
+  energyMix: Array<{ source: string; percentage: number; kwh: number; color: string }>;
+}
+
+export interface EnergyTarget {
+  id: string;
+  society_id: string;
+  target_year: number;
+  consumption_reduction_pct: number;
+  cost_reduction_pct: number;
+  renewable_contribution_pct: number;
+  peak_demand_target_kw?: number | null;
+  notes?: string | null;
+}
+
+export interface InvestmentReport {
+  id: string;
+  society_id: string;
+  societyName: string;
+  generatedDate: string;
+  currentPosition: {
+    annualSpendInr: number;
+    annualKwh: number;
+    peakDemandKw: number;
+    costPerApartmentMonthly: number;
+  };
+  majorProblems: string[];
+  rankedOpportunities: Array<{
+    title: string;
+    category: string;
+    monthlySavingsInr: number;
+    priority: string;
+  }>;
+  recommendedProjects: Array<{
+    name: string;
+    category: string;
+    estimatedCostInr: number;
+    estimatedAnnualSavingsInr: number;
+    paybackMonths: number;
+    roiPct: number;
+  }>;
+  financialSummary: {
+    totalInvestmentInr: number;
+    totalAnnualSavingsInr: number;
+    blendedPaybackMonths: number;
+  };
+  risksAndMitigations: string[];
+  assumptions: string[];
+  nextSteps: string[];
+  executiveMemo: string;
+}
+
+

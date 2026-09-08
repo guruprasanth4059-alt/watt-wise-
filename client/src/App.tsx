@@ -41,6 +41,13 @@ import { Scenarios } from './pages/scenarios/Scenarios';
 import { Opportunities } from './pages/opportunities/Opportunities';
 import { CommitteeView } from './pages/committee/CommitteeView';
 
+// Phase 5 Distributed Energy Pages
+import { AssetsView } from './pages/assets/AssetsView';
+import { SolarView } from './pages/solar/SolarView';
+import { EVView } from './pages/ev/EVView';
+import { StorageView } from './pages/storage/StorageView';
+import { OptimizationView } from './pages/optimization/OptimizationView';
+
 const getNormalizedPath = (): string => {
   if (window.location.hash) {
     const hashPath = window.location.hash.replace(/^#/, '');
@@ -160,6 +167,16 @@ const AppContent: React.FC = () => {
         return { component: <Opportunities />, title: 'Energy Opportunity Engine' };
       case '/committee':
         return { component: <CommitteeView />, title: 'Committee Decision Pack' };
+      case '/assets':
+        return { component: <AssetsView />, title: 'Energy Assets' };
+      case '/solar':
+        return { component: <SolarView />, title: 'Solar Intelligence' };
+      case '/ev':
+        return { component: <EVView />, title: 'EV Charging Intelligence' };
+      case '/storage':
+        return { component: <StorageView />, title: 'Battery & Storage' };
+      case '/optimization':
+        return { component: <OptimizationView />, title: 'Load Optimization' };
       case '/energy':
         return { component: <Energy onNavigate={navigate} />, title: 'Energy Module' };
       case '/bills':

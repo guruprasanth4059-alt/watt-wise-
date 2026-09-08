@@ -20,7 +20,12 @@ import {
   Bot,
   SlidersHorizontal,
   Target,
-  Briefcase
+  Briefcase,
+  Sun,
+  Car,
+  Battery,
+  Cpu,
+  Boxes
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Badge } from '../common/Badge';
@@ -47,6 +52,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, isOpe
     { label: 'Scenarios', path: '/scenarios', icon: SlidersHorizontal },
     { label: 'Opportunities', path: '/opportunities', icon: Target },
     { label: 'Committee', path: '/committee', icon: Briefcase },
+    { label: 'Assets', path: '/assets', icon: Boxes, badge: 'P5' },
+    { label: 'Solar', path: '/solar', icon: Sun, badge: 'P5' },
+    { label: 'EV Charging', path: '/ev', icon: Car, badge: 'P5' },
+    { label: 'Storage', path: '/storage', icon: Battery, badge: 'P5' },
+    { label: 'Optimization', path: '/optimization', icon: Cpu, badge: 'P5' },
     { label: 'Energy', path: '/energy', icon: Zap },
     { label: 'Bills', path: '/bills', icon: Receipt },
     { label: 'Meters', path: '/meters', icon: Gauge },

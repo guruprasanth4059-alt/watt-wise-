@@ -62,6 +62,17 @@ export async function askEnergyCopilot(
   const predictiveAnomalies = getSocietyPredictiveAnomalies(societyId);
   const equipmentSignals = getEquipmentHealthSignals(societyId);
 
+  // Phase 5 Distributed Energy & Investment Context
+  const { getSolarSummary } = await import('./solar.js');
+  const { getEVOptimizationSummary } = await import('./ev.js');
+  const { getProjects } = await import('./projects.js');
+  const { getPeakManagementOverview } = await import('./optimizationEngine.js');
+
+  const solarSummary = getSolarSummary(societyId);
+  const evSummary = getEVOptimizationSummary(societyId);
+  const projects = getProjects(societyId);
+  const peakOverview = getPeakManagementOverview(societyId);
+
   const societyInfo = queryOne<any>(`SELECT name, apartments, city FROM societies WHERE id = ?`, [societyId]);
 
   const currentBill = analytics?.currentMonth;
@@ -90,6 +101,36 @@ export async function askEnergyCopilot(
       expectedMonthlyCostInr: forecast.expectedMonthlyCost,
       peakDemandKw: forecast.peakForecast.expectedPeakKw,
       peakWindow: forecast.peakForecast.likelyTimeWindow
+    },
+    distributedEnergyAndInvestments: {
+      solar: {
+        hasSolar: solarSummary.hasSolarSystem,
+        capacityKw: solarSummary.systemCapacityKw,
+        todayKwh: solarSummary.todayGenerationKwh,
+        cufPct: solarSummary.cufPercentage,
+        performanceStatus: solarSummary.performanceStatus
+      },
+      evCharging: {
+        totalChargers: evSummary.totalChargers,
+        todayEnergyKwh: evSummary.todayEnergyDispensedKwh,
+        peakCoincidenceKw: evSummary.peakCoincidenceKw,
+        potentialAnnualSavingsInr: evSummary.potentialAnnualSavingsInr
+      },
+      peakDemand: {
+        sanctionedKw: peakOverview.sanctionedLoadKw,
+        recordedPeakKw: peakOverview.recordedPeakKw,
+        headroomKw: peakOverview.headroomKw,
+        potentialShavedKw: peakOverview.potentialShavedKw,
+        annualSavingsInr: peakOverview.totalAnnualSavingsInr
+      },
+      projectsPortfolio: projects.map(p => ({
+        name: p.name,
+        category: p.category,
+        status: p.status,
+        capexInr: p.actualCapitalCost || p.estimatedCapitalCost,
+        annualSavingsInr: p.actualAnnualSavingsInr || p.estimatedAnnualSavingsInr,
+        paybackYears: p.actualPaybackYears || p.estimatedPaybackYears
+      }))
     },
     topOpportunities: opportunities.slice(0, 3).map(o => ({
       title: o.title,
@@ -121,10 +162,13 @@ export async function askEnergyCopilot(
   let generatedViaGemini = false;
   if (config.geminiApiKey) {
     try {
-      const prompt = `You are WattWise AI Energy Copilot for apartment societies.
+      const prompt = `You are WattWise AI Energy Strategist and Copilot for apartment societies.
 Answer this user question accurately using ONLY the supplied ground context.
-Do NOT invent numbers, bills, equipment, or savings.
-If data is missing, say: "I don't have enough data to answer that reliably."
+CRITICAL RULES:
+1. Do NOT invent numbers, ROI, equipment, capex, or savings. Use ONLY the metrics provided in ground context.
+2. Clearly distinguish between historical observed data and estimates/simulations.
+3. If asked about solar, battery, EV, capex, or projects, cite specific numbers from the distributedEnergyAndInvestments context.
+4. If data is missing, say: "I don't have enough data to answer that reliably."
 
 Ground Context:
 ${JSON.stringify(groundContext, null, 2)}
@@ -133,10 +177,10 @@ User Question: "${question}"
 
 Return a strict JSON object with this exact schema:
 {
-  "answer": "string (clear, direct, natural response citing numbers from context)",
+  "answer": "string (executive, strategic, clear response citing numbers from context)",
   "evidence": [{"metric": "string", "value": "string or number", "comparison": "optional string"}],
   "recommended_actions": ["string"],
-  "links": ["/energy", "/forecast", "/opportunities", "/anomalies"],
+  "links": ["/solar", "/storage", "/ev", "/optimization", "/projects", "/portfolio", "/investment-report", "/forecast"],
   "confidence": "high" | "medium" | "low"
 }`;
 
@@ -174,7 +218,82 @@ Return a strict JSON object with this exact schema:
   if (!generatedViaGemini) {
     const qLower = question.toLowerCase();
 
-    if (qLower.includes('why') || qLower.includes('increase') || qLower.includes('cost') || qLower.includes('bill')) {
+    if (qLower.includes('solar') || qLower.includes('rooftop') || qLower.includes('cuf')) {
+      const solar = groundContext.distributedEnergyAndInvestments.solar;
+      if (solar.hasSolar) {
+        answer = `Your society currently operates a **${solar.capacityKw} kW** rooftop solar PV plant. Today's generation is **${solar.todayKwh} kWh** at an estimated Capacity Utilization Factor (CUF) of **${solar.cufPct}%** (${solar.performanceStatus}).`;
+        evidence = [
+          { metric: 'Capacity', value: `${solar.capacityKw} kW`, comparison: 'Commissioned' },
+          { metric: 'Today Generation', value: `${solar.todayKwh} kWh`, comparison: 'Solar Telemetry' },
+          { metric: 'CUF', value: `${solar.cufPct}%`, comparison: solar.performanceStatus }
+        ];
+        recommendedActions = [
+          'Inspect inverter log for module soiling or clipping',
+          'Review 20-year Solar ROI simulator for potential rooftop expansion'
+        ];
+        links = ['/solar', '/portfolio'];
+      } else {
+        answer = `Your society does not currently have a registered solar system. A typical 40 kW rooftop solar installation would generate ~56,000 kWh annually, delivering approx ₹4.5 Lakhs in yearly savings with a 3.5 year payback.`;
+        evidence = [
+          { metric: 'Rooftop Potential', value: '40 kW', comparison: 'Simulated' },
+          { metric: 'Estimated Payback', value: '3.5 yrs', comparison: 'At ₹8.15/kWh' }
+        ];
+        recommendedActions = ['Run the Rooftop Solar ROI Simulator', 'Review solar net-metering feasibility'];
+        links = ['/solar', '/investment-report'];
+      }
+    } else if (qLower.includes('battery') || qLower.includes('storage') || qLower.includes('bess')) {
+      answer = `A 50 kWh / 25 kW battery storage system could shave up to 18 kW of coincident peak demand, cutting fixed demand charges by approx ₹64,800/yr. Combined with solar arbitrage, estimated payback is 5.8 years (Simulation — Not Guaranteed).`;
+      evidence = [
+        { metric: 'Sized Capacity', value: '50 kWh', comparison: 'LFP chemistry' },
+        { metric: 'Peak Reduction', value: '18 kW', comparison: 'Evening shave' },
+        { metric: 'Est. Payback', value: '5.8 yrs', comparison: 'NPV Positive' }
+      ];
+      recommendedActions = [
+        'Explore BESS readiness simulator with society hourly load profile',
+        'Consider hybrid inverter setup if expanding solar array'
+      ];
+      links = ['/storage', '/optimization'];
+    } else if (qLower.includes('ev') || qLower.includes('charger') || qLower.includes('charging')) {
+      const ev = groundContext.distributedEnergyAndInvestments.evCharging;
+      answer = `WattWise is monitoring **${ev.totalChargers} EV chargers** dispensing **${ev.todayEnergyKwh} kWh** today. Peak coincidence during 18:00–22:00 adds **${ev.peakCoincidenceKw} kW** to society demand. Shifting charging to off-peak offers up to **₹${ev.potentialAnnualSavingsInr.toLocaleString('en-IN')}/year** in avoided demand surcharges.`;
+      evidence = [
+        { metric: 'Active Chargers', value: ev.totalChargers, comparison: 'Connected' },
+        { metric: 'Peak Coincidence', value: `${ev.peakCoincidenceKw} kW`, comparison: '18:00-22:00 window' },
+        { metric: 'Shift Opportunity', value: `₹${ev.potentialAnnualSavingsInr.toLocaleString('en-IN')}/yr`, comparison: 'Off-peak charging' }
+      ];
+      recommendedActions = [
+        'Activate EV load management throttling during peak society demand hours',
+        'Publish off-peak discounted charging window for residents'
+      ];
+      links = ['/ev', '/optimization'];
+    } else if (qLower.includes('project') || qLower.includes('capex') || qLower.includes('payback') || qLower.includes('invest')) {
+      const projs = groundContext.distributedEnergyAndInvestments.projectsPortfolio;
+      const count = projs.length;
+      answer = `The society has **${count} energy projects** registered in the investment pipeline. These initiatives target common-area pump automation, LED lighting retrofits, rooftop solar, and EV charging management.`;
+      evidence = projs.slice(0, 3).map(p => ({
+        metric: p.name,
+        value: `₹${(p.capexInr || 0).toLocaleString('en-IN')}`,
+        comparison: `${p.paybackYears || 3.5} yr payback (${p.status})`
+      }));
+      recommendedActions = [
+        'View the full Energy Projects Portfolio',
+        'Download the 10-Point Committee Investment Pack for AGM review'
+      ];
+      links = ['/projects', '/investment-report'];
+    } else if (qLower.includes('peak') || qLower.includes('sanctioned') || qLower.includes('demand')) {
+      const peak = groundContext.distributedEnergyAndInvestments.peakDemand;
+      answer = `Your society has a sanctioned load of **${peak.sanctionedKw} kW** with a recent recorded peak of **${peak.recordedPeakKw} kW** (${peak.headroomKw} kW headroom). Staggering pump and EV loads can shave up to **${peak.potentialShavedKw} kW**, saving **₹${peak.annualSavingsInr.toLocaleString('en-IN')}/year**.`;
+      evidence = [
+        { metric: 'Sanctioned Load', value: `${peak.sanctionedKw} kW`, comparison: 'DISCOM contract' },
+        { metric: 'Recorded Peak', value: `${peak.recordedPeakKw} kW`, comparison: 'Recent 30 days' },
+        { metric: 'Shavable Coincident', value: `${peak.potentialShavedKw} kW`, comparison: 'Pumps + EV' }
+      ];
+      recommendedActions = [
+        'Automate pump run cycles to daytime solar or night off-peak windows',
+        'Set up automated SMS/email alerts when load exceeds 85% of sanctioned cap'
+      ];
+      links = ['/optimization', '/forecast'];
+    } else if (qLower.includes('why') || qLower.includes('increase') || qLower.includes('cost') || qLower.includes('bill')) {
       const changePct = groundContext.monthOverMonthChangePct;
       const curKwh = groundContext.currentBill?.unitsKwh?.toLocaleString() || '18,420';
       const curCost = groundContext.currentBill?.amountInr?.toLocaleString() || '1,42,380';

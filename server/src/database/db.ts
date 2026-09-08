@@ -45,6 +45,8 @@ export function initializeDatabase() {
   safeAddColumn('societies', 'pilot_status TEXT DEFAULT "active_pilot"');
   safeAddColumn('societies', 'is_demo INTEGER DEFAULT 0');
   safeAddColumn('societies', 'timezone TEXT DEFAULT "Asia/Kolkata"');
+  safeAddColumn('societies', 'sanctioned_load_kw REAL DEFAULT 120');
+  safeAddColumn('societies', 'configurations TEXT DEFAULT "{}"');
 
   // Meters
   safeAddColumn('meters', 'parent_meter_id TEXT');
@@ -178,6 +180,124 @@ export function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_anomalies_status ON anomalies(status);
     CREATE INDEX IF NOT EXISTS idx_investigations_anomaly ON investigations(anomaly_id);
     CREATE INDEX IF NOT EXISTS idx_tariffs_society ON tariffs(society_id);
+
+    -- Phase 5 Tables
+    CREATE TABLE IF NOT EXISTS energy_assets (
+        id TEXT PRIMARY KEY,
+        society_id TEXT NOT NULL,
+        meter_id TEXT,
+        name TEXT NOT NULL,
+        asset_type TEXT NOT NULL,
+        location TEXT,
+        building TEXT,
+        capacity REAL,
+        capacity_unit TEXT DEFAULT 'kW',
+        installation_date TEXT,
+        status TEXT DEFAULT 'active',
+        manufacturer TEXT,
+        notes TEXT,
+        data_source TEXT DEFAULT 'manual',
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS solar_systems (
+        id TEXT PRIMARY KEY,
+        society_id TEXT NOT NULL,
+        asset_id TEXT,
+        name TEXT NOT NULL,
+        capacity_kwp REAL NOT NULL,
+        panel_technology TEXT DEFAULT 'Monocrystalline',
+        inverter_capacity_kw REAL,
+        azimuth_deg REAL DEFAULT 180,
+        tilt_deg REAL DEFAULT 15,
+        installation_date TEXT,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS solar_measurements (
+        id TEXT PRIMARY KEY,
+        society_id TEXT NOT NULL,
+        solar_system_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        generation_kwh REAL NOT NULL,
+        self_consumed_kwh REAL NOT NULL,
+        grid_exported_kwh REAL DEFAULT 0,
+        peak_power_kw REAL,
+        is_estimated INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(solar_system_id, date)
+    );
+
+    CREATE TABLE IF NOT EXISTS ev_chargers (
+        id TEXT PRIMARY KEY,
+        society_id TEXT NOT NULL,
+        asset_id TEXT,
+        name TEXT NOT NULL,
+        charger_type TEXT DEFAULT 'Type-2 AC',
+        power_rating_kw REAL NOT NULL DEFAULT 7.4,
+        location TEXT,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS ev_sessions (
+        id TEXT PRIMARY KEY,
+        society_id TEXT NOT NULL,
+        charger_id TEXT NOT NULL,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        energy_consumed_kwh REAL NOT NULL,
+        peak_demand_kw REAL,
+        cost_inr REAL,
+        is_peak_window INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS energy_projects (
+        id TEXT PRIMARY KEY,
+        society_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        status TEXT DEFAULT 'evaluating',
+        priority TEXT DEFAULT 'medium',
+        owner TEXT,
+        estimated_cost_inr REAL NOT NULL DEFAULT 0,
+        actual_cost_inr REAL DEFAULT 0,
+        estimated_annual_savings_kwh REAL NOT NULL DEFAULT 0,
+        estimated_annual_savings_inr REAL NOT NULL DEFAULT 0,
+        observed_annual_savings_kwh REAL DEFAULT 0,
+        observed_annual_savings_inr REAL DEFAULT 0,
+        estimated_payback_months REAL,
+        start_date TEXT,
+        completion_date TEXT,
+        notes TEXT,
+        assumptions TEXT DEFAULT '[]',
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS energy_targets (
+        id TEXT PRIMARY KEY,
+        society_id TEXT NOT NULL,
+        target_year INTEGER NOT NULL,
+        consumption_reduction_pct REAL DEFAULT 10,
+        cost_reduction_pct REAL DEFAULT 8,
+        renewable_contribution_pct REAL DEFAULT 20,
+        peak_demand_target_kw REAL,
+        notes TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(society_id, target_year)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_energy_assets_soc ON energy_assets(society_id);
+    CREATE INDEX IF NOT EXISTS idx_solar_systems_soc ON solar_systems(society_id);
+    CREATE INDEX IF NOT EXISTS idx_solar_meas_sys_date ON solar_measurements(solar_system_id, date);
+    CREATE INDEX IF NOT EXISTS idx_ev_chargers_soc ON ev_chargers(society_id);
+    CREATE INDEX IF NOT EXISTS idx_ev_sessions_soc_time ON ev_sessions(society_id, start_time);
+    CREATE INDEX IF NOT EXISTS idx_energy_projects_soc ON energy_projects(society_id);
+    CREATE INDEX IF NOT EXISTS idx_energy_targets_soc ON energy_targets(society_id);
   `);
 }
 

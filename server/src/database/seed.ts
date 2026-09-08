@@ -18,7 +18,8 @@ export function seedDatabase() {
     seedPhase2PilotData();
     seedPhase3SmartMeterData();
     seedPhase4PredictiveData();
-    console.log('Database already seeded. Phase 2, Phase 3, and Phase 4 predictive intelligence verified.');
+    seedPhase5OptimizationData();
+    console.log('Database already seeded. Phase 2, 3, 4, and 5 optimization intelligence verified.');
     return;
   }
 
@@ -548,7 +549,294 @@ export function seedPhase4PredictiveData() {
   }
 }
 
+export function seedPhase5OptimizationData() {
+  const society = queryOne<any>("SELECT id FROM societies WHERE name = 'Green Valley Residency'");
+  if (!society) return;
+  const societyId = society.id;
+
+  try {
+    // 1. Update society with sanctioned load and CEA factor configuration if missing
+    execute(
+      `UPDATE societies 
+       SET sanctioned_load_kw = 120,
+           configurations = json_set(COALESCE(configurations, '{}'), '$.cea_emissions_factor', 0.82)
+       WHERE id = ?`,
+      [societyId]
+    );
+
+    // 2. Seed Energy Assets
+    const existingAssets = queryOne<any>('SELECT id FROM energy_assets WHERE society_id = ?', [societyId]);
+    if (!existingAssets) {
+      const assetsData = [
+        {
+          id: 'asset-gv-grid',
+          name: 'Main 11kV/415V Incomer Transformer',
+          asset_type: 'meter',
+          location: 'Main Substation Yard',
+          building: 'Main Substation',
+          capacity: 120,
+          capacity_unit: 'kW',
+          installation_date: '2022-01-01',
+          manufacturer: 'Schneider Electric',
+          notes: 'Main 120 kW sanctioned grid incomer'
+        },
+        {
+          id: 'asset-gv-solar',
+          name: 'Phase 1 Rooftop Solar PV System',
+          asset_type: 'solar',
+          location: 'Clubhouse & Tower A Terrace',
+          building: 'Clubhouse',
+          capacity: 35,
+          capacity_unit: 'kWp',
+          installation_date: '2025-03-15',
+          manufacturer: 'Tata Power Solar',
+          notes: 'Monocrystalline Perc modules'
+        },
+        {
+          id: 'asset-gv-raw-pump',
+          name: 'Primary Borewell & Sump Transfer Pump',
+          asset_type: 'pump',
+          location: 'Basement 2 Sump Room',
+          building: 'Basement 2',
+          capacity: 15.0,
+          capacity_unit: 'kW',
+          installation_date: '2022-03-01',
+          manufacturer: 'Kirloskar Brothers',
+          notes: 'Primary raw water sump pump'
+        },
+        {
+          id: 'asset-gv-booster',
+          name: 'Hydro-Pneumatic Pressure Booster System',
+          asset_type: 'pump',
+          location: 'Tower A/B Utility Shaft',
+          building: 'Tower A',
+          capacity: 11.2,
+          capacity_unit: 'kW',
+          installation_date: '2022-03-01',
+          manufacturer: 'Grundfos',
+          notes: 'VFD driven pressure booster set'
+        },
+        {
+          id: 'asset-gv-stp',
+          name: 'MBBR Sewage Treatment Plant Aerators',
+          asset_type: 'pump',
+          location: 'STP Enclosure North Wing',
+          building: 'STP Yard',
+          capacity: 7.5,
+          capacity_unit: 'kW',
+          installation_date: '2022-04-10',
+          manufacturer: 'Thermax',
+          notes: 'Aeration roots blowers'
+        },
+        {
+          id: 'asset-gv-ev-01',
+          name: 'Dual AC Type-2 Charger Station 1',
+          asset_type: 'ev_charger',
+          location: 'Visitor & Podium Bay P1',
+          building: 'Podium',
+          capacity: 22.0,
+          capacity_unit: 'kW',
+          installation_date: '2025-06-01',
+          manufacturer: 'Exicom',
+          notes: 'Dual 11 kW Type-2 smart socket'
+        },
+        {
+          id: 'asset-gv-ev-02',
+          name: 'Dual AC Type-2 Charger Station 2',
+          asset_type: 'ev_charger',
+          location: 'Basement 1 Bay B-14',
+          building: 'Basement 1',
+          capacity: 22.0,
+          capacity_unit: 'kW',
+          installation_date: '2025-06-01',
+          manufacturer: 'Exicom',
+          notes: 'Dual 11 kW Type-2 smart socket'
+        },
+        {
+          id: 'asset-gv-lighting',
+          name: 'Basement & Perimeter Driveway Lighting',
+          asset_type: 'lighting',
+          location: 'Perimeter, Driveways & B1/B2',
+          building: 'Basement / Perimeter',
+          capacity: 14.0,
+          capacity_unit: 'kW',
+          installation_date: '2025-11-20',
+          manufacturer: 'Philips Lighting',
+          notes: 'Radar motion sensor LED retrofits'
+        },
+        {
+          id: 'asset-gv-elevators',
+          name: 'High-Speed Gearless Traction Elevators (4x)',
+          asset_type: 'elevator',
+          location: 'Towers A & B Lift Shafts',
+          building: 'Towers A & B',
+          capacity: 18.0,
+          capacity_unit: 'kW',
+          installation_date: '2022-01-15',
+          manufacturer: 'Otis Elevators',
+          notes: '4x passenger elevators with regenerative drives'
+        },
+        {
+          id: 'asset-gv-dg',
+          name: '125 kVA Silent Backup Diesel Generator',
+          asset_type: 'generator',
+          location: 'Acoustic Enclosure South Yard',
+          building: 'DG Enclosure',
+          capacity: 100.0,
+          capacity_unit: 'kW',
+          installation_date: '2022-02-01',
+          manufacturer: 'Cummins India',
+          notes: 'Silent acoustic enclosed DG with AMF panel'
+        }
+      ];
+
+      for (const a of assetsData) {
+        execute(
+          `INSERT INTO energy_assets (
+             id, society_id, meter_id, name, asset_type, location, building, capacity, capacity_unit,
+             installation_date, status, manufacturer, notes, data_source, created_at, updated_at
+           ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, 'manual', datetime('now'), datetime('now'))`,
+          [
+            a.id,
+            societyId,
+            a.name,
+            a.asset_type,
+            a.location,
+            a.building,
+            a.capacity,
+            a.capacity_unit,
+            a.installation_date,
+            a.manufacturer,
+            a.notes
+          ]
+        );
+      }
+    }
+
+    // 3. Seed Solar System & Historical Measurements
+    const existingSolar = queryOne<any>('SELECT id FROM solar_systems WHERE society_id = ?', [societyId]);
+    const solarSysId = existingSolar?.id || 'solar-gv-35kw';
+    if (!existingSolar) {
+      execute(
+        `INSERT INTO solar_systems (
+           id, society_id, asset_id, name, capacity_kwp, panel_technology,
+           inverter_capacity_kw, azimuth_deg, tilt_deg, installation_date, status, created_at
+         ) VALUES (?, ?, 'asset-gv-solar', 'Clubhouse 35kW Rooftop Solar PV', 35, 'Monocrystalline Perc', 30, 180, 15, '2025-03-15', 'active', datetime('now'))`,
+        [solarSysId, societyId]
+      );
+
+      // Seed 30 daily solar measurements
+      for (let day = 30; day >= 0; day--) {
+        const measuredDate = new Date();
+        measuredDate.setDate(measuredDate.getDate() - day);
+        const dateStr = measuredDate.toISOString().split('T')[0];
+
+        // Generation ~ 140 - 155 kWh/day
+        const dailyKwh = Math.round((142 + Math.sin(day) * 12) * 10) / 10;
+        const selfConsumed = Math.round(dailyKwh * 0.88 * 10) / 10;
+        const exported = Math.round((dailyKwh - selfConsumed) * 10) / 10;
+        const peakKw = Math.round((28 + Math.sin(day) * 2) * 10) / 10;
+
+        execute(
+          `INSERT OR IGNORE INTO solar_measurements (
+             id, society_id, solar_system_id, date, generation_kwh, self_consumed_kwh,
+             grid_exported_kwh, peak_power_kw, is_estimated, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+          [
+            `sm-${uuidv4().slice(0, 8)}`,
+            societyId,
+            solarSysId,
+            dateStr,
+            dailyKwh,
+            selfConsumed,
+            exported,
+            peakKw
+          ]
+        );
+      }
+    }
+
+    // 4. Seed EV Chargers and Charging Sessions
+    const existingEv = queryOne<any>('SELECT id FROM ev_chargers WHERE society_id = ?', [societyId]);
+    if (!existingEv) {
+      execute(
+        `INSERT INTO ev_chargers (id, society_id, asset_id, name, charger_type, power_rating_kw, location, status, created_at)
+         VALUES 
+         ('evc-gv-01', ?, 'asset-gv-ev-01', 'Podium Dual EV Station P1', 'Type-2 AC', 22.0, 'Podium Parking Bay P1', 'active', datetime('now')),
+         ('evc-gv-02', ?, 'asset-gv-ev-02', 'Basement Fast AC Station B1', 'Type-2 AC', 22.0, 'Basement 1 Bay B-14', 'active', datetime('now'))`,
+        [societyId, societyId]
+      );
+
+      // Seed 15 sample sessions
+      for (let s = 1; s <= 15; s++) {
+        const isPeak = s % 3 === 0;
+        const energyConsumed = isPeak ? 18.4 : 24.6;
+        const peakDemand = isPeak ? 7.4 : 3.6;
+        const costInr = Math.round(energyConsumed * 10.5);
+
+        execute(
+          `INSERT INTO ev_sessions (
+             id, society_id, charger_id, start_time, end_time,
+             energy_consumed_kwh, peak_demand_kw, cost_inr, is_peak_window, created_at
+           ) VALUES (?, ?, ?, datetime('now', '-' || ? || ' days', '19:30:00'), datetime('now', '-' || ? || ' days', '22:30:00'), ?, ?, ?, ?, datetime('now'))`,
+          [
+            `evs-${uuidv4().slice(0, 8)}`,
+            societyId,
+            s % 2 === 0 ? 'evc-gv-01' : 'evc-gv-02',
+            s,
+            s,
+            energyConsumed,
+            peakDemand,
+            costInr,
+            isPeak ? 1 : 0
+          ]
+        );
+      }
+    }
+
+    // 5. Seed Energy Projects Portfolio
+    const existingProjects = queryOne<any>('SELECT id FROM energy_projects WHERE society_id = ?', [societyId]);
+    if (!existingProjects) {
+      execute(
+        `INSERT INTO energy_projects (
+           id, society_id, name, category, status, priority, owner,
+           estimated_cost_inr, actual_cost_inr,
+           estimated_annual_savings_kwh, estimated_annual_savings_inr,
+           observed_annual_savings_kwh, observed_annual_savings_inr,
+           estimated_payback_months, start_date, completion_date,
+           notes, assumptions, created_at, updated_at
+         ) VALUES 
+         ('proj-gv-solar', ?, '35 kW Rooftop Solar PV Installation', 'solar', 'completed', 'high', 'Secretary / MC', 1680000, 1620000, 49000, 399000, 51200, 417280, 48, '2025-01-10', '2025-03-15', 'Commissioned and generating above baseline.', '["Module yield 4.15 kWh/kWp/day","BESCOM net metering"]', datetime('now'), datetime('now')),
+         ('proj-gv-pump', ?, 'Smart VFD & Ultrasonic Level Automation for Water Pumps', 'pump_upgrade', 'in_progress', 'high', 'Facility Manager', 85000, 0, 14200, 115730, 0, 0, 9, '2026-08-01', null, 'Installation 80% complete. Commissioning next week.', '["15% energy drop on hydro-pneumatic booster","No overflow wastage"]', datetime('now'), datetime('now')),
+         ('proj-gv-led', ?, 'Basement & Perimeter Motion-Sensor LED Batten Retrofit', 'led_retrofit', 'completed', 'medium', 'MC Member (Infra)', 65000, 62000, 15400, 125510, 16100, 131215, 6, '2025-11-01', '2025-11-20', 'Realizing 58% energy drop in basement lighting circuit.', '["140x 18W radar motion battens replacing 36W tubes"]', datetime('now'), datetime('now')),
+         ('proj-gv-storage', ?, '50 kWh BESS Peak-Shaving Battery Pilot', 'battery_storage', 'idea', 'medium', 'Energy Committee', 1200000, 0, 12800, 168000, 0, 0, 85, null, null, 'Under feasibility review by Management Committee.', '["Peak shaving of 18 kW","Solar daytime arbitrage"]', datetime('now'), datetime('now'))`,
+        [societyId, societyId, societyId, societyId]
+      );
+    }
+
+    // 6. Seed Energy Strategy Targets
+    const existingTargets = queryOne<any>('SELECT id FROM energy_targets WHERE society_id = ?', [societyId]);
+    if (!existingTargets) {
+      const currentYear = new Date().getFullYear();
+      execute(
+        `INSERT INTO energy_targets (
+           id, society_id, target_year, consumption_reduction_pct, cost_reduction_pct,
+           renewable_contribution_pct, peak_demand_target_kw, notes, created_at
+         ) VALUES 
+         ('tgt-gv-01', ?, ?, 20, 18, 25, 95.0, 'Annual common area energy decarbonization and peak shaving strategy.', datetime('now')),
+         ('tgt-gv-02', ?, ?, 25, 22, 35, 90.0, 'Phase 2 expansion with battery storage and water pump VFDs.', datetime('now'))`,
+        [societyId, currentYear, societyId, currentYear + 1]
+      );
+    }
+
+    console.log('Phase 5 optimization and distributed energy data successfully seeded.');
+  } catch (err) {
+    console.error('Failed to seed Phase 5 optimization data:', err);
+  }
+}
+
 // If invoked directly via CLI
 if (process.argv[1]?.endsWith('seed.ts') || process.argv[1]?.endsWith('seed.js')) {
   seedDatabase();
 }
+

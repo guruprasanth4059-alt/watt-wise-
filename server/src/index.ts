@@ -34,6 +34,14 @@ import { equipmentHealthRouter } from './routes/equipmentHealth.js';
 import { benchmarksRouter } from './routes/benchmarks.js';
 import { copilotRouter } from './routes/copilot.js';
 import { committeeRouter } from './routes/committee.js';
+import { assetsRouter } from './routes/assets.js';
+import { solarRouter } from './routes/solar.js';
+import { evRouter } from './routes/ev.js';
+import { storageRouter } from './routes/storage.js';
+import { optimizationRouter } from './routes/optimization.js';
+import { projectsRouter } from './routes/projects.js';
+import { portfolioRouter } from './routes/portfolio.js';
+import { investmentReportRouter } from './routes/investmentReport.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -89,6 +97,14 @@ app.use('/api/equipment-health', equipmentHealthRouter);
 app.use('/api/benchmarks', benchmarksRouter);
 app.use('/api/copilot', copilotRouter);
 app.use('/api/committee', committeeRouter);
+app.use('/api/assets', assetsRouter);
+app.use('/api/solar', solarRouter);
+app.use('/api/ev', evRouter);
+app.use('/api/storage', storageRouter);
+app.use('/api/optimization', optimizationRouter);
+app.use('/api/projects', projectsRouter);
+app.use('/api/portfolio', portfolioRouter);
+app.use('/api/investment-report', investmentReportRouter);
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {

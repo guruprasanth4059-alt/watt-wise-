@@ -482,3 +482,131 @@ CREATE INDEX IF NOT EXISTS idx_equipment_health_soc ON equipment_health_signals(
 CREATE INDEX IF NOT EXISTS idx_copilot_messages_session ON ai_copilot_messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_committee_summaries_soc ON committee_summaries(society_id);
 
+-- =============================================================
+-- PHASE 5: ENERGY ASSETS, SOLAR, EV, PROJECTS & OPTIMIZATION
+-- =============================================================
+
+-- 1. Energy Assets Registry
+CREATE TABLE IF NOT EXISTS energy_assets (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    meter_id TEXT REFERENCES meters(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    asset_type TEXT NOT NULL, -- meter, solar, ev_charger, battery, pump, hvac, lighting, elevator, generator, other
+    location TEXT,
+    building TEXT,
+    capacity REAL, -- kW, kWp, kWh, HP
+    capacity_unit TEXT DEFAULT 'kW',
+    installation_date TEXT,
+    status TEXT DEFAULT 'active', -- active, inactive, maintenance, unknown
+    manufacturer TEXT,
+    notes TEXT,
+    data_source TEXT DEFAULT 'manual', -- manual, smart_meter, api
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 2. Solar Systems & Measurements
+CREATE TABLE IF NOT EXISTS solar_systems (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    asset_id TEXT REFERENCES energy_assets(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    capacity_kwp REAL NOT NULL,
+    panel_technology TEXT DEFAULT 'Monocrystalline',
+    inverter_capacity_kw REAL,
+    azimuth_deg REAL DEFAULT 180,
+    tilt_deg REAL DEFAULT 15,
+    installation_date TEXT,
+    status TEXT DEFAULT 'active',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS solar_measurements (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    solar_system_id TEXT NOT NULL REFERENCES solar_systems(id) ON DELETE CASCADE,
+    date TEXT NOT NULL, -- YYYY-MM-DD
+    generation_kwh REAL NOT NULL,
+    self_consumed_kwh REAL NOT NULL,
+    grid_exported_kwh REAL DEFAULT 0,
+    peak_power_kw REAL,
+    is_estimated INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(solar_system_id, date)
+);
+
+-- 3. EV Chargers & Sessions
+CREATE TABLE IF NOT EXISTS ev_chargers (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    asset_id TEXT REFERENCES energy_assets(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    charger_type TEXT DEFAULT 'Type-2 AC', -- Type-2 AC, CCS2 DC, 15A Socket
+    power_rating_kw REAL NOT NULL DEFAULT 7.4,
+    location TEXT,
+    status TEXT DEFAULT 'active',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ev_sessions (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    charger_id TEXT NOT NULL REFERENCES ev_chargers(id) ON DELETE CASCADE,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    energy_consumed_kwh REAL NOT NULL,
+    peak_demand_kw REAL,
+    cost_inr REAL,
+    is_peak_window INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 4. Energy Projects Portfolio & ROI Tracking
+CREATE TABLE IF NOT EXISTS energy_projects (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL, -- solar, led_retrofit, pump_upgrade, hvac_optimization, ev_smart_charging, battery_storage, submetering
+    status TEXT DEFAULT 'evaluating', -- idea, evaluating, approved, in_progress, completed, monitoring, closed
+    priority TEXT DEFAULT 'medium', -- low, medium, high
+    owner TEXT,
+    estimated_cost_inr REAL NOT NULL DEFAULT 0,
+    actual_cost_inr REAL DEFAULT 0,
+    estimated_annual_savings_kwh REAL NOT NULL DEFAULT 0,
+    estimated_annual_savings_inr REAL NOT NULL DEFAULT 0,
+    observed_annual_savings_kwh REAL DEFAULT 0,
+    observed_annual_savings_inr REAL DEFAULT 0,
+    estimated_payback_months REAL,
+    start_date TEXT,
+    completion_date TEXT,
+    notes TEXT,
+    assumptions TEXT DEFAULT '[]', -- JSON
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 5. Society Energy Strategy Targets
+CREATE TABLE IF NOT EXISTS energy_targets (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    target_year INTEGER NOT NULL,
+    consumption_reduction_pct REAL DEFAULT 10,
+    cost_reduction_pct REAL DEFAULT 8,
+    renewable_contribution_pct REAL DEFAULT 20,
+    peak_demand_target_kw REAL,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(society_id, target_year)
+);
+
+-- Phase 5 Indexes
+CREATE INDEX IF NOT EXISTS idx_energy_assets_soc ON energy_assets(society_id);
+CREATE INDEX IF NOT EXISTS idx_solar_systems_soc ON solar_systems(society_id);
+CREATE INDEX IF NOT EXISTS idx_solar_meas_sys_date ON solar_measurements(solar_system_id, date);
+CREATE INDEX IF NOT EXISTS idx_ev_chargers_soc ON ev_chargers(society_id);
+CREATE INDEX IF NOT EXISTS idx_ev_sessions_soc_time ON ev_sessions(society_id, start_time);
+CREATE INDEX IF NOT EXISTS idx_energy_projects_soc ON energy_projects(society_id);
+CREATE INDEX IF NOT EXISTS idx_energy_targets_soc ON energy_targets(society_id);
+
+
