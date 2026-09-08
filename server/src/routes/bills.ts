@@ -104,6 +104,31 @@ billsRouter.get('/', authenticateToken, async (req: AuthenticatedRequest, res: R
   }
 });
 
+// 1.1 Get single bill by ID (Strict society isolation)
+billsRouter.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const societyId = getAuthorizedSocietyId(req);
+    const { id } = req.params;
+
+    const bill = queryOne(
+      `SELECT b.*, m.name as meter_name, m.meter_number 
+       FROM bills b 
+       LEFT JOIN meters m ON b.meter_id = m.id 
+       WHERE b.id = ? AND b.society_id = ?`,
+      [id, societyId]
+    );
+
+    if (!bill) {
+      res.status(404).json({ error: 'Bill record not found.' });
+      return;
+    }
+
+    res.json(bill);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve bill record.' });
+  }
+});
+
 // 2. Upload file & Extract metadata (DOES NOT SAVE - Returns for verification screen)
 billsRouter.post('/upload', authenticateToken, requireRole('society_admin', 'committee_member'), upload.single('billFile'), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {

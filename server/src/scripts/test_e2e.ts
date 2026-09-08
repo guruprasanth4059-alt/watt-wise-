@@ -168,7 +168,58 @@ async function runE2ETests() {
   const leads: any = await leadsRes.json();
   assert(leads.some((l: any) => l.name === 'Aditi Varma'), 'Platform Admin retrieved captured pilot lead');
 
-  console.log(`\n🎉 Test Suite Completed: ${passed}/${total} assertions passed!`);
+  // 11. Multi-Tenant Data Isolation Enforcement (Requirement 8 & 19)
+  const newSocBillsRes = await fetch(`${BASE_URL}/bills`, { headers: newSocietyHeaders });
+  const newSocBills: any = await newSocBillsRes.json();
+  assert(newSocBills.bills.length === 1, 'Newly registered society only sees its own 1 bill, not demo bills');
+  assert(newSocBills.bills[0].society_id === regData.society.id, 'Retrieved bill strictly belongs to the new society');
+
+  // Attempt to access Green Valley Residency bill using new society's token
+  const crossTenantAccessRes = await fetch(`${BASE_URL}/bills/bill-demo-006`, { headers: newSocietyHeaders });
+  assert(crossTenantAccessRes.status === 404, 'Cross-tenant bill access strictly rejected with 404');
+
+  // 12. Role-Based Access Control (RBAC) Enforcement (Requirement 7 & 8)
+  const residentLoginRes = await fetch(`${BASE_URL}/auth/demo-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'resident' })
+  });
+  const residentAuth: any = await residentLoginRes.json();
+  const residentHeaders = { 'Authorization': `Bearer ${residentAuth.token}`, 'Content-Type': 'application/json' };
+
+  // Resident attempting to manually add a bill should be blocked (403 Forbidden)
+  const forbiddenActionRes = await fetch(`${BASE_URL}/bills/manual`, {
+    method: 'POST',
+    headers: residentHeaders,
+    body: JSON.stringify({ billing_period: '2026-04', units_kwh: 500, bill_amount: 4000 })
+  });
+  assert(forbiddenActionRes.status === 403, 'Resident prevented from modifying bill ledger (403 Forbidden)');
+
+  // Unauthenticated request should be blocked (401 Unauthorized)
+  const unauthRes = await fetch(`${BASE_URL}/bills`);
+  assert(unauthRes.status === 401, 'Unauthenticated request rejected with 401 Unauthorized');
+
+  // 13. Deterministic Arithmetic vs AI Calculation Integrity (Requirement 3)
+  const newSocAnalyticsRes = await fetch(`${BASE_URL}/analytics`, { headers: newSocietyHeaders });
+  const newSocAnalytics: any = await newSocAnalyticsRes.json();
+  assert(newSocAnalytics.currentMonth.consumptionKwh === 12500, 'New society analytics isolated: exact 12,500 kWh');
+  assert(newSocAnalytics.currentMonth.billAmount === 98500, 'New society analytics isolated: exact ₹98,500');
+  // Cost per apartment: 98500 / 180 = 547
+  assert(newSocAnalytics.costPerApartment === 547, 'Deterministic cost per apartment: ₹98,500 / 180 = ₹547');
+  // Cost per kWh: 98500 / 12500 = 7.88
+  assert(newSocAnalytics.costPerKwh === 7.88, 'Deterministic cost per kWh: ₹98,500 / 12,500 = ₹7.88');
+
+  // 14. Energy Score Component Transparency (Requirement 12)
+  assert(
+    newSocAnalytics.energyScoreComponents &&
+    typeof newSocAnalytics.energyScoreComponents.trendScore === 'number' &&
+    typeof newSocAnalytics.energyScoreComponents.dataCompletenessScore === 'number' &&
+    typeof newSocAnalytics.energyScoreComponents.savingsProgressScore === 'number' &&
+    typeof newSocAnalytics.energyScoreComponents.efficiencyScore === 'number',
+    'WattWise Energy Score is deterministically computed from 4 transparent components'
+  );
+
+  console.log(`\n🎉 Verification Suite Completed: ${passed}/${total} assertions passed!`);
 }
 
 runE2ETests().catch(console.error);
