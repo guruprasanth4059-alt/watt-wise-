@@ -33,20 +33,41 @@ import { Settings } from './pages/settings/Settings';
 import { SubscriptionPage } from './pages/subscription/Subscription';
 import { AdminDashboard } from './pages/admin/Admin';
 
+const getNormalizedPath = (): string => {
+  if (window.location.hash) {
+    const hashPath = window.location.hash.replace(/^#/, '');
+    if (hashPath.startsWith('/')) return hashPath;
+  }
+  let p = window.location.pathname || '/';
+  // Strip repository subpath if hosted on GitHub Pages (e.g. /watt-wise- or /watt-wise)
+  p = p.replace(/^\/watt-wise-?/, '');
+  if (!p || p === '') p = '/';
+  return p;
+};
+
 const AppContent: React.FC = () => {
   const { user, isLoading } = useAuth();
-  const [currentPath, setCurrentPath] = useState<string>(window.location.pathname || '/');
+  const [currentPath, setCurrentPath] = useState<string>(getNormalizedPath());
 
   useEffect(() => {
     const handlePopState = () => {
-      setCurrentPath(window.location.pathname || '/');
+      setCurrentPath(getNormalizedPath());
     };
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handlePopState);
+    };
   }, []);
 
   const navigate = (path: string) => {
-    window.history.pushState({}, '', path);
+    const isGhPages = window.location.hostname.includes('github.io');
+    if (isGhPages) {
+      window.location.hash = path;
+    } else {
+      window.history.pushState({}, '', path);
+    }
     setCurrentPath(path);
     window.scrollTo(0, 0);
   };
