@@ -18,7 +18,7 @@ async function runE2ETests() {
 
   // 1. Health Check
   const healthRes = await fetch(`${BASE_URL}/health`);
-  const health = await healthRes.json();
+  const health: any = await healthRes.json();
   assert(health.status === 'healthy', 'Backend health check returns healthy');
 
   // 2. Demo Login - Society Admin
@@ -27,7 +27,7 @@ async function runE2ETests() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ role: 'admin' })
   });
-  const adminAuth = await adminLoginRes.json();
+  const adminAuth: any = await adminLoginRes.json();
   assert(adminAuth.user?.role === 'society_admin', 'Demo login returns society_admin persona');
   assert(adminAuth.society?.name === 'Green Valley Residency', 'Demo login associates with Green Valley Residency');
 
@@ -36,7 +36,7 @@ async function runE2ETests() {
 
   // 3. Analytics Calculation Verification (Exact formulas)
   const analyticsRes = await fetch(`${BASE_URL}/analytics`, { headers: authHeaders });
-  const analytics = await analyticsRes.json();
+  const analytics: any = await analyticsRes.json();
   assert(analytics.currentMonth.period === '2026-03', 'Current billing cycle is 2026-03');
   assert(analytics.currentMonth.consumptionKwh === 18420, 'Current monthly consumption is exactly 18,420 kWh');
   assert(analytics.currentMonth.billAmount === 142380, 'Current monthly bill is exactly ₹1,42,380');
@@ -47,7 +47,7 @@ async function runE2ETests() {
 
   // 4. Category-level Submeter Verification (No fabricated data)
   const categoryRes = await fetch(`${BASE_URL}/analytics/category-breakdown`, { headers: authHeaders });
-  const categoryData = await categoryRes.json();
+  const categoryData: any = await categoryRes.json();
   assert(categoryData.available === true, 'Sub-meter data detected and category breakdown is available');
   assert(categoryData.categories.length >= 4, `Sub-meter categories returned: ${categoryData.categories.length}`);
 
@@ -70,7 +70,7 @@ async function runE2ETests() {
       facilities: ['Water Pumps', 'Common Lighting', 'Clubhouse', 'Swimming Pool']
     })
   });
-  const regData = await regRes.json();
+  const regData: any = await regRes.json();
   assert(regRes.status === 201, '4-Step Onboarding completed and returned 201 Created');
   assert(regData.society?.name === 'Palm Meadows Gated Community', 'New society created with verified name');
   assert(regData.society?.apartments === 180, 'Apartment count recorded');
@@ -91,7 +91,7 @@ async function runE2ETests() {
       notes: 'First onboarded bill'
     })
   });
-  const newBill = await newBillRes.json();
+  const newBill: any = await newBillRes.json();
   assert(newBillRes.status === 201, 'Manual bill entered and validated for new society');
   assert(newBill.bill?.units_kwh === 12500, 'Units consumed persisted into database');
 
@@ -100,7 +100,7 @@ async function runE2ETests() {
     method: 'POST',
     headers: authHeaders
   });
-  const aiInsight = await aiGenRes.json();
+  const aiInsight: any = await aiGenRes.json();
   assert(aiInsight.summary && aiInsight.summary.length > 10, 'AI generated structured summary');
   assert(Array.isArray(aiInsight.observations), 'AI output contains observations array');
   assert(Array.isArray(aiInsight.possible_causes), 'AI output contains possible causes with cautious language');
@@ -108,7 +108,7 @@ async function runE2ETests() {
 
   // 8. Recommendations & Action Tracking Lifecycle
   const recsRes = await fetch(`${BASE_URL}/recommendations`, { headers: authHeaders });
-  const recs = await recsRes.json();
+  const recs: any = await recsRes.json();
   assert(recs.length >= 3, `Recommendations loaded: ${recs.length}`);
   const targetRec = recs[0];
 
@@ -124,7 +124,7 @@ async function runE2ETests() {
       after_consumption: 18420
     })
   });
-  const actionData = await actionRes.json();
+  const actionData: any = await actionRes.json();
   assert(actionRes.status === 201, 'Action recorded successfully');
   assert(actionData.caveat.includes('Other factors may also have contributed'), 'Causality disclaimer enforced');
 
@@ -134,7 +134,7 @@ async function runE2ETests() {
     headers: authHeaders,
     body: JSON.stringify({ month: '2026-03' })
   });
-  const reportData = await reportRes.json();
+  const reportData: any = await reportRes.json();
   assert(reportRes.status === 201, 'Monthly executive report generated');
   assert(reportData.reportData?.societyName === 'Green Valley Residency', 'Report branded for society');
   assert(reportData.reportData?.totalConsumptionKwh === 18420, 'Report contains verified consumption');
@@ -161,11 +161,11 @@ async function runE2ETests() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ role: 'platform_admin' })
   });
-  const platAdmin = await platAdminRes.json();
+  const platAdmin: any = await platAdminRes.json();
   const platHeaders = { 'Authorization': `Bearer ${platAdmin.token}`, 'Content-Type': 'application/json' };
 
   const leadsRes = await fetch(`${BASE_URL}/admin/pilots`, { headers: platHeaders });
-  const leads = await leadsRes.json();
+  const leads: any = await leadsRes.json();
   assert(leads.some((l: any) => l.name === 'Aditi Varma'), 'Platform Admin retrieved captured pilot lead');
 
   console.log(`\n🎉 Test Suite Completed: ${passed}/${total} assertions passed!`);
