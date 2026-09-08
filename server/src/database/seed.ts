@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { db, initializeDatabase, execute, queryOne } from './db.js';
+import { SimulatedSmartMeterProvider } from '../services/providers/simulatedProvider.js';
 
 export function seedDatabase() {
   initializeDatabase();
@@ -9,7 +10,8 @@ export function seedDatabase() {
   const existingSociety = queryOne('SELECT id FROM societies WHERE name = ?', ['Green Valley Residency']);
   if (existingSociety) {
     seedPhase2PilotData();
-    console.log('Database already seeded. Phase 2 pilot attributes verified.');
+    seedPhase3SmartMeterData();
+    console.log('Database already seeded. Phase 2 pilot & Phase 3 smart meter attributes verified.');
     return;
   }
 
@@ -402,6 +404,109 @@ function seedPhase2PilotData() {
        ('audit-demo-02', ?, 'user-society-admin-01', 'bill_verified', 'bill', 'bill-demo-006', '{"period":"2026-03","units":18420,"amount":142380}', '2026-03-05 14:30:00'),
        ('audit-demo-03', ?, 'user-committee-member-01', 'action_completed', 'action', 'action-demo-01', '{"action":"Digital Astronomical Relay on Pumps","observed_reduction_kwh":1780}', '2026-03-08 11:15:00')`,
       [societyId, societyId, societyId, societyId]
+    );
+  }
+}
+
+export function seedPhase3SmartMeterData() {
+  const societyId = 'soc-green-valley-01';
+
+  // 1. Update society timezone
+  execute(`UPDATE societies SET timezone = 'Asia/Kolkata' WHERE id = ?`, [societyId]);
+
+  // 2. Add BESCOM tariff if not exists
+  const existingTariff = queryOne('SELECT id FROM tariffs WHERE society_id = ?', [societyId]);
+  if (!existingTariff) {
+    execute(
+      `INSERT INTO tariffs (id, society_id, name, rate_type, rate_per_kwh, configuration, source, is_active)
+       VALUES ('tariff-demo-bescom', ?, 'BESCOM LT-2 Common Area Commercial & Non-Domestic Tariff', 'fixed', 8.20, '{"duty_percent": 9, "fixed_demand_charge": 110}', 'demo_seed', 1)`,
+      [societyId]
+    );
+  }
+
+  // 3. Connect Main Meter and Pump Meter to Simulated Provider
+  const mainMeter = queryOne<any>("SELECT id FROM meters WHERE society_id = ? AND type = 'common_area'", [societyId]);
+  const pumpMeter = queryOne<any>("SELECT id FROM meters WHERE society_id = ? AND type = 'pump'", [societyId]);
+
+  if (mainMeter) {
+    execute(
+      `UPDATE meters SET data_source = 'demo', connection_status = 'connected', is_main_meter = 1, category = 'common_area' WHERE id = ?`,
+      [mainMeter.id]
+    );
+    const existingConn = queryOne('SELECT id FROM meter_connections WHERE meter_id = ?', [mainMeter.id]);
+    if (!existingConn) {
+      execute(
+        `INSERT INTO meter_connections (id, society_id, meter_id, provider, status, external_meter_id, data_source, last_sync_at, last_success_at, records_received)
+         VALUES ('conn-demo-main', ?, ?, 'simulated_smart_meter', 'connected', 'EXT-SIM-MAIN-01', 'demo', datetime('now', '-8 minutes'), datetime('now', '-8 minutes'), 672)`,
+        [societyId, mainMeter.id]
+      );
+    }
+  }
+
+  if (pumpMeter) {
+    execute(
+      `UPDATE meters SET data_source = 'demo', connection_status = 'connected', category = 'pump' WHERE id = ?`,
+      [pumpMeter.id]
+    );
+    const existingConn = queryOne('SELECT id FROM meter_connections WHERE meter_id = ?', [pumpMeter.id]);
+    if (!existingConn) {
+      execute(
+        `INSERT INTO meter_connections (id, society_id, meter_id, provider, status, external_meter_id, data_source, last_sync_at, last_success_at, records_received)
+         VALUES ('conn-demo-pump', ?, ?, 'simulated_smart_meter', 'connected', 'EXT-SIM-PUMP-02', 'demo', datetime('now', '-8 minutes'), datetime('now', '-8 minutes'), 672)`,
+        [societyId, pumpMeter.id]
+      );
+    }
+  }
+
+  // 4. Ingest 7 days of 15-min simulated interval measurements for both meters
+  const existingMeasurements = queryOne<{ cnt: number }>('SELECT COUNT(*) as cnt FROM meter_measurements WHERE society_id = ?', [societyId]);
+  if (!existingMeasurements || existingMeasurements.cnt === 0) {
+    const simProvider = new SimulatedSmartMeterProvider();
+    const to = new Date();
+    const from = new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    Promise.all([
+      simProvider.fetchMeasurements({
+        externalMeterId: 'EXT-SIM-MAIN-01',
+        from: from.toISOString(),
+        to: to.toISOString(),
+        resolutionMinutes: 15
+      }),
+      simProvider.fetchMeasurements({
+        externalMeterId: 'EXT-SIM-PUMP-02',
+        from: from.toISOString(),
+        to: to.toISOString(),
+        resolutionMinutes: 15
+      })
+    ]).then(([mainM, pumpM]) => {
+      for (const m of mainM) {
+        execute(
+          `INSERT OR IGNORE INTO meter_measurements (id, society_id, meter_id, timestamp, energy_kwh, demand_kw, voltage, current, power_factor, frequency, source, quality_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'demo', 'simulated')`,
+          [`meas-${uuidv4().slice(0, 8)}`, societyId, mainMeter?.id || 'meter-demo-01', m.timestamp, m.energy_kwh, m.demand_kw, m.voltage, m.current, m.power_factor, m.frequency]
+        );
+      }
+      for (const m of pumpM) {
+        execute(
+          `INSERT OR IGNORE INTO meter_measurements (id, society_id, meter_id, timestamp, energy_kwh, demand_kw, voltage, current, power_factor, frequency, source, quality_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'demo', 'simulated')`,
+          [`meas-${uuidv4().slice(0, 8)}`, societyId, pumpMeter?.id || 'meter-demo-02', m.timestamp, m.energy_kwh, m.demand_kw, m.voltage, m.current, m.power_factor, m.frequency]
+        );
+      }
+    }).catch(err => console.error('Failed to seed smart meter measurements:', err));
+  }
+
+  // 5. Seed one prominent simulated interval anomaly for demonstration
+  const existingAnom = queryOne<any>("SELECT id FROM anomalies WHERE society_id = ? AND type = 'unexpected_overnight'", [societyId]);
+  if (!existingAnom) {
+    execute(
+      `INSERT INTO anomalies (id, society_id, meter_id, type, severity, observed_value, expected_value, deviation_percent, started_at, ended_at, status, explanation, recommended_checks)
+       VALUES 
+       ('anom-demo-overnight', ?, ?, 'unexpected_overnight', 'high', 12.4, 0.5, 2380, datetime('now', '-18 hours'), datetime('now', '-16 hours'), 'new', 
+        'Continuous water pump operation observed during overnight baseload hours (02:15 - 04:00 IST). Demand sustained at 12.4 kW against expected idle load of 0.5 kW.',
+        '["Inspect overhead tank overflow sensors and float switch cutoffs in Sump 2.","Check whether mechanical timer relay failed in closed contact position.","Inspect underground transfer pipeline for silent burst or leakage."]'
+       )`,
+      [societyId, pumpMeter?.id || 'meter-demo-02']
     );
   }
 }

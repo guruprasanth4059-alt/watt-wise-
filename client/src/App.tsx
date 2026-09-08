@@ -24,6 +24,7 @@ import { Energy } from './pages/energy/Energy';
 import { Bills } from './pages/bills/Bills';
 import { Meters } from './pages/meters/Meters';
 import { Insights } from './pages/insights/Insights';
+import { AnomalyCenter } from './pages/insights/AnomalyCenter';
 import { Recommendations } from './pages/recommendations/Recommendations';
 import { Savings } from './pages/savings/Savings';
 import { Reports } from './pages/reports/Reports';
@@ -148,6 +149,9 @@ const AppContent: React.FC = () => {
         return { component: <Bills onNavigate={navigate} />, title: 'Electricity Bills' };
       case '/meters':
         return { component: <Meters />, title: 'Meter Panels' };
+      case '/insights/anomalies':
+      case '/anomalies':
+        return { component: <AnomalyCenter />, title: 'Interval Anomaly Center' };
       case '/insights':
         return { component: <Insights />, title: 'WattWise AI Insights' };
       case '/recommendations':

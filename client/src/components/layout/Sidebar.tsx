@@ -13,6 +13,7 @@ import {
   Settings,
   CreditCard,
   ShieldCheck,
+  AlertTriangle,
   LogOut,
   X
 } from 'lucide-react';
@@ -39,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, isOpe
     { label: 'Energy', path: '/energy', icon: Zap },
     { label: 'Bills', path: '/bills', icon: Receipt },
     { label: 'Meters', path: '/meters', icon: Gauge },
+    { label: 'Anomalies', path: '/insights/anomalies', icon: AlertTriangle, badge: 'Live' },
     { label: 'Insights', path: '/insights', icon: Sparkles, badge: 'AI' },
     { label: 'Recommendations', path: '/recommendations', icon: Lightbulb },
     { label: 'Savings', path: '/savings', icon: PiggyBank },

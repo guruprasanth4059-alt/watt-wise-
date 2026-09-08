@@ -35,6 +35,8 @@ export interface Society {
 }
 
 export type MeterType = 'common_area' | 'pump' | 'clubhouse' | 'elevator' | 'lighting' | 'parking' | 'other';
+export type MeterSource = 'manual' | 'file' | 'api' | 'smart_meter' | 'demo';
+export type ConnectionStatus = 'not_connected' | 'connecting' | 'connected' | 'syncing' | 'sync_error' | 'disconnected';
 
 export interface Meter {
   id: string;
@@ -44,8 +46,119 @@ export interface Meter {
   type: MeterType;
   building?: string | null;
   area?: string | null;
+  parent_meter_id?: string | null;
+  is_main_meter?: number;
+  category?: string | null;
+  timezone?: string;
+  data_source?: MeterSource;
+  connection_status?: ConnectionStatus;
   is_active: number;
   created_at: string;
+}
+
+export interface MeterConnection {
+  id: string;
+  society_id: string;
+  meter_id: string;
+  provider: string;
+  status: ConnectionStatus;
+  external_meter_id?: string | null;
+  data_source: MeterSource;
+  config?: Record<string, any>;
+  last_sync_at?: string | null;
+  last_success_at?: string | null;
+  last_error_at?: string | null;
+  last_error_message?: string | null;
+  records_received: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MeterMeasurement {
+  id: string;
+  society_id: string;
+  meter_id: string;
+  timestamp: string; // ISO-8601 UTC
+  energy_kwh: number;
+  demand_kw?: number | null;
+  voltage?: number | null;
+  current?: number | null;
+  power_factor?: number | null;
+  frequency?: number | null;
+  source: MeterSource;
+  quality_status: 'valid' | 'suspect' | 'missing' | 'estimated' | 'simulated';
+  created_at: string;
+}
+
+export type AnomalyType = 'consumption_spike' | 'unexpected_overnight' | 'persistent_high_load' | 'missing_data' | 'meter_offline' | 'unusual_pattern';
+export type AnomalySeverity = 'low' | 'medium' | 'high' | 'critical';
+export type AnomalyStatus = 'new' | 'investigating' | 'resolved' | 'dismissed';
+
+export interface IntervalAnomaly {
+  id: string;
+  society_id: string;
+  meter_id?: string | null;
+  meter_name?: string | null;
+  type: AnomalyType;
+  severity: AnomalySeverity;
+  observed_value: number;
+  expected_value: number;
+  deviation_percent?: number | null;
+  started_at: string;
+  ended_at?: string | null;
+  status: AnomalyStatus;
+  explanation?: string | null;
+  recommended_checks: string[];
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface AnomalyInvestigation {
+  id: string;
+  society_id: string;
+  anomaly_id: string;
+  possible_cause?: string | null;
+  notes?: string | null;
+  action_taken?: string | null;
+  resolution?: string | null;
+  resolved_at?: string | null;
+  created_by?: string | null;
+  created_at: string;
+}
+
+export interface Tariff {
+  id: string;
+  society_id: string;
+  name: string;
+  rate_type: 'fixed' | 'slab' | 'tou';
+  rate_per_kwh: number;
+  configuration: Record<string, any>;
+  effective_from?: string | null;
+  effective_to?: string | null;
+  source: string;
+  is_active: number;
+  created_at: string;
+}
+
+export interface RealTimeSummary {
+  currentLoadKw: number;
+  todayKwh: number;
+  monthToDateKwh: number;
+  estimatedCostToday: number;
+  estimatedCostMonth: number;
+  lastSyncedAt: string | null;
+  latencyMinutes: number;
+  connectionHealth: ConnectionStatus;
+  loadProfile: Array<{ hour: number; avgKwh: number; peakKw: number }>;
+  timeOfDay: { morning: number; afternoon: number; evening: number; night: number };
+  activeAnomaliesCount: number;
+  dataReconciliation: {
+    billKwh: number;
+    meterKwh: number;
+    differencePercent: number;
+    isFlagged: boolean;
+  };
+  isSimulated: boolean;
 }
 
 export interface Bill {

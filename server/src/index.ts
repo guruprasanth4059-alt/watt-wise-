@@ -24,6 +24,8 @@ import { adminRouter } from './routes/admin.js';
 import { subscriptionsRouter } from './routes/subscriptions.js';
 import { pilotRouter } from './routes/pilot.js';
 import { auditRouter } from './routes/audit.js';
+import { anomaliesRouter } from './routes/anomalies.js';
+import { tariffsRouter } from './routes/tariffs.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,6 +71,8 @@ app.use('/api/admin', adminRouter);
 app.use('/api/subscriptions', subscriptionsRouter);
 app.use('/api/pilot', pilotRouter);
 app.use('/api/audit-logs', auditRouter);
+app.use('/api/anomalies', anomaliesRouter);
+app.use('/api/tariffs', tariffsRouter);
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {

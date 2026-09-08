@@ -44,6 +44,15 @@ export function initializeDatabase() {
   safeAddColumn('societies', 'pilot_end_date TEXT');
   safeAddColumn('societies', 'pilot_status TEXT DEFAULT "active_pilot"');
   safeAddColumn('societies', 'is_demo INTEGER DEFAULT 0');
+  safeAddColumn('societies', 'timezone TEXT DEFAULT "Asia/Kolkata"');
+
+  // Meters
+  safeAddColumn('meters', 'parent_meter_id TEXT');
+  safeAddColumn('meters', 'is_main_meter INTEGER DEFAULT 0');
+  safeAddColumn('meters', 'category TEXT DEFAULT "common_area"');
+  safeAddColumn('meters', 'timezone TEXT DEFAULT "Asia/Kolkata"');
+  safeAddColumn('meters', 'data_source TEXT DEFAULT "manual"');
+  safeAddColumn('meters', 'connection_status TEXT DEFAULT "not_connected"');
 
   // Bills
   safeAddColumn('bills', 'previous_reading REAL');
@@ -77,6 +86,99 @@ export function initializeDatabase() {
   // AI Insights
   safeAddColumn('ai_insights', 'recommended_checks TEXT DEFAULT "[]"');
   safeAddColumn('ai_insights', 'data_limitations TEXT DEFAULT "[]"');
+
+  // Phase 3 Tables
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS meter_connections (
+        id TEXT PRIMARY KEY,
+        society_id TEXT NOT NULL,
+        meter_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'not_connected',
+        external_meter_id TEXT,
+        data_source TEXT DEFAULT 'smart_meter',
+        config TEXT DEFAULT '{}',
+        last_sync_at TEXT,
+        last_success_at TEXT,
+        last_error_at TEXT,
+        last_error_message TEXT,
+        records_received INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS meter_measurements (
+        id TEXT PRIMARY KEY,
+        society_id TEXT NOT NULL,
+        meter_id TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        energy_kwh REAL NOT NULL,
+        demand_kw REAL,
+        voltage REAL,
+        current REAL,
+        power_factor REAL,
+        frequency REAL,
+        source TEXT NOT NULL DEFAULT 'smart_meter',
+        quality_status TEXT NOT NULL DEFAULT 'valid',
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(meter_id, timestamp, source)
+    );
+
+    CREATE TABLE IF NOT EXISTS anomalies (
+        id TEXT PRIMARY KEY,
+        society_id TEXT NOT NULL,
+        meter_id TEXT,
+        type TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'medium',
+        observed_value REAL NOT NULL,
+        expected_value REAL NOT NULL,
+        deviation_percent REAL,
+        started_at TEXT NOT NULL,
+        ended_at TEXT,
+        status TEXT DEFAULT 'new',
+        explanation TEXT,
+        recommended_checks TEXT DEFAULT '[]',
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS investigations (
+        id TEXT PRIMARY KEY,
+        society_id TEXT NOT NULL,
+        anomaly_id TEXT NOT NULL,
+        possible_cause TEXT,
+        notes TEXT,
+        action_taken TEXT,
+        resolution TEXT,
+        resolved_at TEXT,
+        created_by TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS tariffs (
+        id TEXT PRIMARY KEY,
+        society_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        rate_type TEXT NOT NULL DEFAULT 'fixed',
+        rate_per_kwh REAL DEFAULT 8.0,
+        configuration TEXT DEFAULT '{}',
+        effective_from TEXT,
+        effective_to TEXT,
+        source TEXT DEFAULT 'user_entered',
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_meter_connections_society ON meter_connections(society_id);
+    CREATE INDEX IF NOT EXISTS idx_meter_connections_meter ON meter_connections(meter_id);
+    CREATE INDEX IF NOT EXISTS idx_measurements_meter_time ON meter_measurements(meter_id, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_measurements_society_time ON meter_measurements(society_id, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_anomalies_society ON anomalies(society_id);
+    CREATE INDEX IF NOT EXISTS idx_anomalies_meter ON anomalies(meter_id);
+    CREATE INDEX IF NOT EXISTS idx_anomalies_status ON anomalies(status);
+    CREATE INDEX IF NOT EXISTS idx_investigations_anomaly ON investigations(anomaly_id);
+    CREATE INDEX IF NOT EXISTS idx_tariffs_society ON tariffs(society_id);
+  `);
 }
 
 // Database helper functions with typed outputs

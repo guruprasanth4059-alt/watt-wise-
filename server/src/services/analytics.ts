@@ -1,7 +1,8 @@
 import { query, queryOne } from '../database/db.js';
-import { Bill, Society, PilotStatus, PilotScorecardData } from '../types/index.js';
+import { Bill, Society, PilotStatus, PilotScorecardData, RealTimeSummary } from '../types/index.js';
 import { evaluateDataQuality, DataQualityReport } from './dataQuality.js';
 import { calculateSocietyBaseline, BaselineResult } from './baseline.js';
+import { calculateEstimatedRunningCost } from './tariffEngine.js';
 
 export interface AnalyticsSummary {
   currentMonth: {
@@ -414,3 +415,199 @@ export function getPilotScorecard(societyId: string): PilotScorecardData {
     pilotHealthScore
   };
 }
+
+export function getNearRealTimeEnergySummary(societyId: string): RealTimeSummary {
+  // Query connected meters for society
+  const connectedMeters = query<any>(
+    `SELECT m.id, m.name, m.data_source, mc.status, mc.last_sync_at, mc.provider
+     FROM meters m
+     JOIN meter_connections mc ON m.id = mc.meter_id
+     WHERE m.society_id = ? AND mc.status IN ('connected', 'syncing')`,
+    [societyId]
+  );
+
+  const hasSimulated = connectedMeters.some(m => m.data_source === 'demo' || m.provider === 'simulated_smart_meter');
+  const activeAnomalies = queryOne<{ count: number }>(
+    `SELECT COUNT(*) as count FROM anomalies WHERE society_id = ? AND status IN ('new', 'investigating')`,
+    [societyId]
+  )?.count || 0;
+
+  // If no connected meters, return clean empty state
+  if (connectedMeters.length === 0) {
+    const reconciliation = getDataReconciliation(societyId);
+    return {
+      currentLoadKw: 0,
+      todayKwh: 0,
+      monthToDateKwh: 0,
+      estimatedCostToday: 0,
+      estimatedCostMonth: 0,
+      lastSyncedAt: null,
+      latencyMinutes: 0,
+      connectionHealth: 'not_connected',
+      loadProfile: Array.from({ length: 24 }, (_, i) => ({ hour: i, avgKwh: 0, peakKw: 0 })),
+      timeOfDay: { morning: 0, afternoon: 0, evening: 0, night: 0 },
+      activeAnomaliesCount: activeAnomalies,
+      dataReconciliation: reconciliation,
+      isSimulated: false
+    };
+  }
+
+  // 1. Current Load (kW) - latest reading within 2 hours
+  const latestReadings = query<any>(
+    `SELECT demand_kw, timestamp 
+     FROM meter_measurements 
+     WHERE society_id = ? 
+     ORDER BY timestamp DESC 
+     LIMIT 5`,
+    [societyId]
+  );
+
+  let currentLoadKw = 0;
+  if (latestReadings.length > 0) {
+    currentLoadKw = Math.round(latestReadings.reduce((sum, r) => sum + (r.demand_kw || 0), 0) / latestReadings.length * 10) / 10;
+  }
+
+  // 2. Today's consumption (kWh)
+  const todayRow = queryOne<any>(
+    `SELECT SUM(energy_kwh) as total_kwh 
+     FROM meter_measurements 
+     WHERE society_id = ? AND date(timestamp) = date('now')`,
+    [societyId]
+  );
+  const todayKwh = Math.round((todayRow?.total_kwh || 0) * 10) / 10;
+
+  // 3. Month-to-date consumption (kWh)
+  const monthRow = queryOne<any>(
+    `SELECT SUM(energy_kwh) as total_kwh 
+     FROM meter_measurements 
+     WHERE society_id = ? AND strftime('%Y-%m', timestamp) = strftime('%Y-%m', 'now')`,
+    [societyId]
+  );
+  const monthToDateKwh = Math.round((monthRow?.total_kwh || 0) * 10) / 10;
+
+  // Cost estimates using Tariff Engine
+  const costTodayResult = calculateEstimatedRunningCost(todayKwh, societyId);
+  const costMonthResult = calculateEstimatedRunningCost(monthToDateKwh, societyId);
+
+  // Sync health & latency
+  const latestSyncMeter = connectedMeters.sort((a, b) => 
+    new Date(b.last_sync_at || 0).getTime() - new Date(a.last_sync_at || 0).getTime()
+  )[0];
+
+  let latencyMinutes = 0;
+  if (latestSyncMeter?.last_sync_at) {
+    latencyMinutes = Math.max(0, Math.round((Date.now() - new Date(latestSyncMeter.last_sync_at).getTime()) / (60 * 1000)));
+  }
+
+  // 4. Daily Load Profile (24-hour breakdown averaged across last 7 days)
+  const profileRows = query<any>(
+    `SELECT 
+       cast(strftime('%H', timestamp) as integer) as hour,
+       AVG(energy_kwh) as avg_kwh,
+       MAX(demand_kw) as peak_kw
+     FROM meter_measurements
+     WHERE society_id = ? AND timestamp >= datetime('now', '-7 days')
+     GROUP BY cast(strftime('%H', timestamp) as integer)
+     ORDER BY hour ASC`,
+    [societyId]
+  );
+
+  const loadProfile = Array.from({ length: 24 }, (_, i) => {
+    const found = profileRows.find(r => r.hour === i);
+    return {
+      hour: i,
+      avgKwh: found ? Math.round(found.avg_kwh * 10) / 10 : 0,
+      peakKw: found ? Math.round((found.peak_kw || 0) * 10) / 10 : 0
+    };
+  });
+
+  // 5. Time-of-day buckets (last 7 days total distribution)
+  let morning = 0, afternoon = 0, evening = 0, night = 0;
+  for (const p of loadProfile) {
+    if (p.hour >= 6 && p.hour < 12) morning += p.avgKwh * 7;
+    else if (p.hour >= 12 && p.hour < 18) afternoon += p.avgKwh * 7;
+    else if (p.hour >= 18 && p.hour < 22) evening += p.avgKwh * 7;
+    else night += p.avgKwh * 7;
+  }
+
+  const reconciliation = getDataReconciliation(societyId);
+
+  return {
+    currentLoadKw,
+    todayKwh,
+    monthToDateKwh,
+    estimatedCostToday: costTodayResult.cost,
+    estimatedCostMonth: costMonthResult.cost,
+    lastSyncedAt: latestSyncMeter?.last_sync_at || null,
+    latencyMinutes,
+    connectionHealth: latestSyncMeter?.status || 'connected',
+    loadProfile,
+    timeOfDay: {
+      morning: Math.round(morning),
+      afternoon: Math.round(afternoon),
+      evening: Math.round(evening),
+      night: Math.round(night)
+    },
+    activeAnomaliesCount: activeAnomalies,
+    dataReconciliation: reconciliation,
+    isSimulated: hasSimulated
+  };
+}
+
+export function getDataReconciliation(societyId: string): {
+  billKwh: number;
+  meterKwh: number;
+  differencePercent: number;
+  isFlagged: boolean;
+} {
+  // Get latest verified utility bill
+  const latestBill = queryOne<Bill>(
+    `SELECT * FROM bills WHERE society_id = ? AND verified = 1 ORDER BY billing_period DESC LIMIT 1`,
+    [societyId]
+  );
+
+  if (!latestBill) {
+    return { billKwh: 0, meterKwh: 0, differencePercent: 0, isFlagged: false };
+  }
+
+  // Sum interval readings for the same month period (e.g. '2026-03')
+  const period = latestBill.billing_period.slice(0, 7);
+  const meterSum = queryOne<any>(
+    `SELECT SUM(energy_kwh) as total_kwh 
+     FROM meter_measurements 
+     WHERE society_id = ? AND strftime('%Y-%m', timestamp) = ?`,
+    [societyId, period]
+  )?.total_kwh || 0;
+
+  const billKwh = Math.round(latestBill.units_kwh);
+  const meterKwh = Math.round(meterSum);
+
+  if (meterKwh === 0) {
+    return {
+      billKwh,
+      meterKwh: 0,
+      discomBillTotalKwh: billKwh,
+      smartMeterTotalKwh: 0,
+      differencePercent: 0,
+      isFlagged: false,
+      hasComparison: false,
+      reconciliationStatus: 'review_needed'
+    };
+  }
+
+  const diff = Math.abs(billKwh - meterKwh);
+  const differencePercent = Math.round((diff / billKwh) * 1000) / 10;
+  const isFlagged = differencePercent > 5.0; // flag if discrepancy > 5%
+
+  return {
+    billKwh,
+    meterKwh,
+    discomBillTotalKwh: billKwh,
+    smartMeterTotalKwh: meterKwh,
+    differencePercent,
+    isFlagged,
+    hasComparison: true,
+    reconciliationStatus: isFlagged ? 'review_needed' : 'matched'
+  };
+}
+

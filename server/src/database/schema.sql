@@ -226,6 +226,87 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
+-- Phase 3 Smart Meter & Real-Time Energy Intelligence Tables
+CREATE TABLE IF NOT EXISTS meter_connections (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    meter_id TEXT NOT NULL REFERENCES meters(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL, -- simulated, pulse, energy_api, custom
+    status TEXT NOT NULL DEFAULT 'not_connected', -- not_connected, connecting, connected, syncing, sync_error, disconnected
+    external_meter_id TEXT,
+    data_source TEXT DEFAULT 'smart_meter', -- manual, file, api, smart_meter, demo
+    config TEXT DEFAULT '{}', -- JSON configuration (no plaintext secrets)
+    last_sync_at TEXT,
+    last_success_at TEXT,
+    last_error_at TEXT,
+    last_error_message TEXT,
+    records_received INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS meter_measurements (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    meter_id TEXT NOT NULL REFERENCES meters(id) ON DELETE CASCADE,
+    timestamp TEXT NOT NULL, -- ISO-8601 UTC
+    energy_kwh REAL NOT NULL,
+    demand_kw REAL,
+    voltage REAL,
+    current REAL,
+    power_factor REAL,
+    frequency REAL,
+    source TEXT NOT NULL DEFAULT 'smart_meter', -- manual, file, api, smart_meter, demo
+    quality_status TEXT NOT NULL DEFAULT 'valid', -- valid, suspect, missing, estimated, simulated
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(meter_id, timestamp, source)
+);
+
+CREATE TABLE IF NOT EXISTS anomalies (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    meter_id TEXT REFERENCES meters(id) ON DELETE SET NULL,
+    type TEXT NOT NULL, -- consumption_spike, unexpected_overnight, persistent_high_load, missing_data, meter_offline, unusual_pattern
+    severity TEXT NOT NULL DEFAULT 'medium', -- low, medium, high, critical
+    observed_value REAL NOT NULL,
+    expected_value REAL NOT NULL,
+    deviation_percent REAL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    status TEXT DEFAULT 'new', -- new, investigating, resolved, dismissed
+    explanation TEXT,
+    recommended_checks TEXT DEFAULT '[]', -- JSON array
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS investigations (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    anomaly_id TEXT NOT NULL REFERENCES anomalies(id) ON DELETE CASCADE,
+    possible_cause TEXT,
+    notes TEXT,
+    action_taken TEXT,
+    resolution TEXT,
+    resolved_at TEXT,
+    created_by TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS tariffs (
+    id TEXT PRIMARY KEY,
+    society_id TEXT NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    rate_type TEXT NOT NULL DEFAULT 'fixed', -- fixed, slab, tou
+    rate_per_kwh REAL DEFAULT 8.0,
+    configuration TEXT DEFAULT '{}', -- JSON object with slabs or TOU slots
+    effective_from TEXT,
+    effective_to TEXT,
+    source TEXT DEFAULT 'user_entered',
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
 -- Indexes for rapid society-isolated queries
 CREATE INDEX IF NOT EXISTS idx_users_society ON users(society_id);
 CREATE INDEX IF NOT EXISTS idx_meters_society ON meters(society_id);
@@ -238,3 +319,12 @@ CREATE INDEX IF NOT EXISTS idx_reports_society ON reports(society_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_society ON notifications(society_id);
 CREATE INDEX IF NOT EXISTS idx_baselines_society ON baselines(society_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_society ON audit_logs(society_id);
+CREATE INDEX IF NOT EXISTS idx_meter_connections_society ON meter_connections(society_id);
+CREATE INDEX IF NOT EXISTS idx_meter_connections_meter ON meter_connections(meter_id);
+CREATE INDEX IF NOT EXISTS idx_measurements_meter_time ON meter_measurements(meter_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_measurements_society_time ON meter_measurements(society_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_anomalies_society ON anomalies(society_id);
+CREATE INDEX IF NOT EXISTS idx_anomalies_meter ON anomalies(meter_id);
+CREATE INDEX IF NOT EXISTS idx_anomalies_status ON anomalies(status);
+CREATE INDEX IF NOT EXISTS idx_investigations_anomaly ON investigations(anomaly_id);
+CREATE INDEX IF NOT EXISTS idx_tariffs_society ON tariffs(society_id);
