@@ -22,28 +22,45 @@ export interface AIAnalysisRequest {
   historicalData: Array<{ period: string; consumptionKwh: number; billAmount: number }>;
   meters: Array<{ name: string; type: string }>;
   actions: Array<{ action_taken: string; action_date: string }>;
+  dataQualityStatus?: 'good' | 'needs_review' | 'insufficient';
+  baselineStatus?: 'not_established' | 'preliminary' | 'established';
 }
 
 export interface AIAnalysisResponse {
   summary: string;
   observations: string[];
-  possibleCauses: string[];
+  possible_causes: string[];
+  recommended_checks: string[];
   recommendations: string[];
   confidence: 'low' | 'medium' | 'high';
+  data_limitations: string[];
   disclaimer: string;
 }
 
-const DISCLAIMER_TEXT = 'AI-generated insight based on available society data.';
+const DISCLAIMER_TEXT = 'AI-generated qualitative insight based strictly on available verified society data. Not an engineering guarantee or regulatory certification.';
 
 export async function generateEnergyInsights(data: AIAnalysisRequest): Promise<AIAnalysisResponse> {
-  // If data is severely lacking
-  if (!data.currentMonth || data.historicalData.length === 0) {
+  const verifiedCount = data.historicalData.length;
+
+  // Data limitation assessment
+  const dataLimitations: string[] = [];
+  if (verifiedCount < 3) {
+    dataLimitations.push(`Only ${verifiedCount} verified billing month(s) available in dataset. At least 3 months are recommended to establish an undisturbed baseline.`);
+  }
+  if (!data.meters.some(m => m.type !== 'common_area')) {
+    dataLimitations.push('No sub-meter telemetry configured. Analysis is conducted strictly at the composite common-area level.');
+  }
+
+  // If severely lacking data
+  if (!data.currentMonth || verifiedCount === 0) {
     return {
-      summary: 'Insufficient electricity data available for deep analysis. At least one confirmed bill is needed to generate consumption insights.',
+      summary: 'Insufficient electricity data available for qualitative analysis. At least one confirmed bill is needed to generate consumption insights.',
       observations: ['No historical baseline established yet.'],
-      possibleCauses: ['Data collection has recently started.'],
-      recommendations: ['Upload recent electricity bills for at least 2 consecutive billing cycles.'],
+      possible_causes: ['Data ingestion has just begun for this society.'],
+      recommended_checks: ['Verify that the primary common-area utility meter number matches your latest BESCOM/utility invoice.'],
+      recommendations: ['Upload recent electricity bills for at least 3 consecutive billing cycles.'],
       confidence: 'low',
+      data_limitations: ['No verified invoices present in the society ledger.'],
       disclaimer: DISCLAIMER_TEXT
     };
   }
@@ -51,26 +68,29 @@ export async function generateEnergyInsights(data: AIAnalysisRequest): Promise<A
   // Attempt Gemini API call if key configured
   if (config.geminiApiKey) {
     try {
-      const prompt = `You are WattWise AI, an energy-management intelligence advisor for apartment societies and RWAs.
-Analyze this structured electricity consumption data and return a strictly structured JSON response.
+      const prompt = `You are WattWise AI, an expert energy intelligence advisor for apartment societies and Resident Welfare Associations (RWAs).
+Analyze this structured electricity consumption data and return a strictly validated JSON response.
 
 Input Data:
 ${JSON.stringify(data, null, 2)}
 
-CRITICAL RULES:
-1. Answer: What changed? What trends are visible? What should the RWA investigate? What practical actions could be considered?
-2. Use careful, measured language: "May indicate", "Possible cause", "Consider checking", "Based on available data".
+CRITICAL COMPLIANCE RULES:
+1. Focus on: What changed? What trends are visible? What should the RWA investigate? What practical actions could be considered?
+2. Use careful, non-declarative language: "May indicate", "Possible cause", "Consider checking", "Based on available data".
 3. NEVER state an unverified cause as an absolute fact.
-4. NEVER invent electricity measurements, savings, customers, regulatory compliance, or utility integrations.
-5. NEVER guarantee savings or ROI. Label any estimate as potential.
-6. Set confidence to "low", "medium", or "high" based purely on data completeness.
-7. Return ONLY a valid JSON object matching this exact format:
+4. NEVER invent measurements, savings figures, certifications, or utility integrations.
+5. NEVER guarantee savings or ROI. Label any opportunity as potential.
+6. Set confidence ("low", "medium", "high") based strictly on data completeness (>= 5 months = high, 3-4 months = medium, < 3 months = low).
+7. If data coverage is sparse or lacking sub-meters, explicitly include limitations in "data_limitations".
+8. Return ONLY valid JSON matching this schema:
 {
   "summary": "concise 2-sentence executive summary",
   "observations": ["observation 1", "observation 2"],
-  "possibleCauses": ["possible cause 1", "possible cause 2"],
+  "possible_causes": ["possible cause 1", "possible cause 2"],
+  "recommended_checks": ["recommended check 1", "recommended check 2"],
   "recommendations": ["recommendation 1", "recommendation 2"],
-  "confidence": "high" | "medium" | "low"
+  "confidence": "high" | "medium" | "low",
+  "data_limitations": ["limitation 1"]
 }`;
 
       const response = await fetch(
@@ -92,77 +112,79 @@ CRITICAL RULES:
         const json: any = await response.json();
         const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text;
         if (rawText) {
-          const parsed = JSON.parse(rawText) as AIAnalysisResponse;
+          const parsed = JSON.parse(rawText);
           return {
-            ...parsed,
+            summary: parsed.summary || 'Monthly common-area energy pattern evaluated against recorded cycles.',
+            observations: Array.isArray(parsed.observations) ? parsed.observations : ['Steady consumption trend observed.'],
+            possible_causes: Array.isArray(parsed.possible_causes) ? parsed.possible_causes : (Array.isArray(parsed.possibleCauses) ? parsed.possibleCauses : ['Seasonal ambient temperature shifts.']),
+            recommended_checks: Array.isArray(parsed.recommended_checks) ? parsed.recommended_checks : ['Review pump operational logs.'],
+            recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : ['Audit common lighting schedules.'],
+            confidence: ['low', 'medium', 'high'].includes(parsed.confidence) ? parsed.confidence : (verifiedCount >= 5 ? 'high' : 'medium'),
+            data_limitations: Array.isArray(parsed.data_limitations) && parsed.data_limitations.length > 0 ? parsed.data_limitations : dataLimitations,
             disclaimer: DISCLAIMER_TEXT
           };
         }
       }
     } catch (err) {
-      console.warn('Gemini API call failed or timed out. Falling back to deterministic intelligence engine:', err);
+      console.warn('Gemini API call failed, activating deterministic rule-based fallback:', err);
     }
   }
 
-  // Robust Heuristic Engine fallback (guarantees 100% availability with cautious language)
-  const change = data.consumptionChangePercent;
-  const currKwh = data.currentMonth.consumptionKwh;
-  const prevKwh = data.previousMonth ? data.previousMonth.consumptionKwh : currKwh;
-  const isIncrease = change > 0;
-  const absChange = Math.abs(change);
+  // Robust deterministic rule-based fallback (Requirement 21)
+  const isReduction = data.consumptionChangePercent < 0;
+  const isSpike = data.consumptionChangePercent > 15;
+  const changeMagnitude = Math.abs(data.consumptionChangePercent);
 
-  let confidence: 'low' | 'medium' | 'high' = 'medium';
-  if (data.historicalData.length >= 6) {
-    confidence = 'high';
-  } else if (data.historicalData.length < 3) {
-    confidence = 'low';
+  let summary = `Common-area electricity consumption for ${data.currentMonth.period} was ${data.currentMonth.consumptionKwh.toLocaleString()} kWh (₹${data.currentMonth.billAmount.toLocaleString()}), reflecting a ${changeMagnitude}% ${isReduction ? 'reduction' : 'increase'} from the previous cycle.`;
+  if (data.actions.length > 0) {
+    summary += ` A reduction followed the recorded maintenance intervention: "${data.actions[0].action_taken}". Other factors may also have contributed.`;
   }
 
-  let summary = '';
-  const observations: string[] = [];
-  const possibleCauses: string[] = [];
-  const recommendations: string[] = [];
+  const observations = [
+    `Current month consumption: ${data.currentMonth.consumptionKwh.toLocaleString()} kWh across ${data.society.apartments} units.`,
+    `Month-over-month trend: ${changeMagnitude}% ${isReduction ? 'decrease' : 'increase'}.`,
+    verifiedCount >= 3 
+      ? `Analysis supported by ${verifiedCount} consecutive verified historical billing cycles.` 
+      : `Dataset currently has ${verifiedCount} billing cycle(s); baseline remains preliminary.`
+  ];
 
-  if (isIncrease) {
-    summary = `Electricity consumption increased by approximately ${absChange}% compared with the previous month. Available data indicates that common-area systems may have experienced extended runtime or higher baseline demand.`;
-    observations.push(
-      `Monthly consumption increased by ${Math.round(currKwh - prevKwh)} kWh (+${absChange}%).`,
-      `Average per-apartment common-area share increased to ${Math.round(currKwh / (data.society.apartments || 1))} kWh.`
-    );
-    possibleCauses.push(
-      'Water transfer or hydro-pneumatic booster pumps may have experienced extended run cycles due to valve leaks or float switch lag.',
-      'Common-area lighting or basement ventilation schedules may have shifted without automated timer corrections.'
-    );
-    recommendations.push(
-      'Consider reviewing water pump operating logs and tank fill intervals with facility maintenance.',
-      'Check mechanical timer switches on basement and security lighting circuits to ensure daylight shutoff.'
-    );
-  } else {
-    summary = `Electricity consumption decreased by approximately ${absChange}% compared with the previous month. Data suggests that operational adjustments or seasonal demand shifts contributed to lower power usage.`;
-    observations.push(
-      `Monthly electricity usage decreased by ${Math.round(prevKwh - currKwh)} kWh (-${absChange}%).`,
-      `Overall monthly billing dropped by ₹${Math.round((data.previousMonth?.billAmount || 0) - (data.currentMonth?.billAmount || 0))}.`
-    );
-    possibleCauses.push(
-      'Recorded timer adjustments and automated pump scheduling may be contributing to reduced duty cycles.',
-      'Moderate ambient temperatures may have lessened ventilation and clubhouse cooling loads.'
-    );
-    recommendations.push(
-      'Continue monitoring pump runtime to verify that water delivery pressure remains stable.',
-      'Consider inspecting basement motion sensors to sustain common lighting efficiency.'
-    );
-  }
+  const possible_causes = isSpike
+    ? [
+        'Water pump runtime extension caused by higher summer replenishment demands or float-valve wear.',
+        'Basement ventilation exhaust fans running continuous cycles instead of intermittent intervals.',
+        'Common-area corridor or landscape lighting timer drift remaining active during early morning daylight.'
+      ]
+    : isReduction
+    ? [
+        'Completed equipment maintenance, timer calibration, or motor servicing.',
+        'Seasonal weather moderation decreasing cooling or pumping cycles.',
+        'Facility operational adjustments enacted by the Management Committee.'
+      ]
+    : [
+        'Steady baseline demand across core common-area utilities.',
+        'Routine elevator and circulation lighting load stability.'
+      ];
 
-  if (data.meters.some(m => m.type === 'pump')) {
-    observations.push('Water pump sub-meter active; isolated monitoring is recommended during morning peak hours.');
-  }
+  const recommended_checks = [
+    'Inspect water transfer pump timer relays and tank sensor thresholds.',
+    'Check astronomical timer clocks on streetlights and perimeter lights for time drift.',
+    'Audit STP/WTP motor operating hours against daily treated volume.'
+  ];
+
+  const recommendations = [
+    'Review water pump operational hours and calibrate astronomical timer switches.',
+    'Evaluate transitional LED retrofitting on basement and podium parking lighting circuits.',
+    'Establish monthly meter inspection audits prior to utility tariff reconciliation.'
+  ];
 
   return {
     summary,
     observations,
-    possibleCauses,
+    possible_causes,
+    recommended_checks,
     recommendations,
-    confidence,
+    confidence: verifiedCount >= 5 ? 'high' : verifiedCount >= 3 ? 'medium' : 'low',
+    data_limitations: dataLimitations,
     disclaimer: DISCLAIMER_TEXT
   };
 }

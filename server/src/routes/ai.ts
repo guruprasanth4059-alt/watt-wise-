@@ -74,17 +74,19 @@ aiRouter.post('/generate', authenticateToken, requireRole('society_admin', 'comm
     const period = analytics.currentMonth?.period || new Date().toISOString().slice(0, 7);
 
     execute(
-      `INSERT INTO ai_insights (id, society_id, period, summary, observations, possible_causes, recommendations, confidence, prompt_data)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO ai_insights (id, society_id, period, summary, observations, possible_causes, recommended_checks, recommendations, confidence, data_limitations, prompt_data)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         insightId,
         societyId,
         period,
         aiResult.summary,
         JSON.stringify(aiResult.observations),
-        JSON.stringify(aiResult.possibleCauses),
+        JSON.stringify(aiResult.possible_causes),
+        JSON.stringify(aiResult.recommended_checks),
         JSON.stringify(aiResult.recommendations),
         aiResult.confidence,
+        JSON.stringify(aiResult.data_limitations),
         JSON.stringify(requestData)
       ]
     );
@@ -102,9 +104,11 @@ aiRouter.post('/generate', authenticateToken, requireRole('society_admin', 'comm
       period,
       summary: aiResult.summary,
       observations: aiResult.observations,
-      possible_causes: aiResult.possibleCauses,
+      possible_causes: aiResult.possible_causes,
+      recommended_checks: aiResult.recommended_checks,
       recommendations: aiResult.recommendations,
       confidence: aiResult.confidence,
+      data_limitations: aiResult.data_limitations,
       disclaimer: aiResult.disclaimer,
       created_at: new Date().toISOString()
     });

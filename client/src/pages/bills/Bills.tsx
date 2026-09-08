@@ -18,7 +18,8 @@ import {
   FileCheck,
   Trash2,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  Download
 } from 'lucide-react';
 
 interface BillsProps {
@@ -197,6 +198,37 @@ export const Bills: React.FC<BillsProps> = ({ onNavigate }) => {
     }
   };
 
+  // Export CSV
+  const handleExportCsv = async () => {
+    try {
+      const token = localStorage.getItem('wattwise_token');
+      const res = await fetch('http://localhost:5000/api/bills/export/csv', {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+      if (!res.ok) throw new Error('Failed to export CSV');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bills_export_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setFeedbackMessage({
+        type: 'success',
+        text: 'Electricity bills exported successfully to CSV.'
+      });
+    } catch (err: any) {
+      setFeedbackMessage({
+        type: 'error',
+        text: err.message || 'Failed to export bills.'
+      });
+    }
+  };
+
   const canEdit = user?.role === 'society_admin' || user?.role === 'committee_member';
 
   return (
@@ -210,34 +242,45 @@ export const Bills: React.FC<BillsProps> = ({ onNavigate }) => {
           </p>
         </div>
 
-        {canEdit && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setManualModalOpen(true)}
-              icon={<PlusCircle className="w-4 h-4" />}
-            >
-              Manual Entry
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              isLoading={isUploading}
-              icon={<Upload className="w-4 h-4" />}
-            >
-              Upload Bill / CSV
-            </Button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              accept=".pdf,.csv,.xlsx,.xls,.txt"
-              className="hidden"
-            />
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCsv}
+            icon={<Download className="w-4 h-4" />}
+          >
+            Export CSV
+          </Button>
+
+          {canEdit && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setManualModalOpen(true)}
+                icon={<PlusCircle className="w-4 h-4" />}
+              >
+                Manual Entry
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                isLoading={isUploading}
+                icon={<Upload className="w-4 h-4" />}
+              >
+                Upload Bill / CSV
+              </Button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept=".pdf,.csv,.xlsx,.xls,.txt"
+                className="hidden"
+              />
+            </>
+          )}
+        </div>
       </div>
 
       {/* Status Feedback Banner */}

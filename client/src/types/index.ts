@@ -11,6 +11,8 @@ export interface User {
   created_at?: string;
 }
 
+export type PilotStatus = 'not_started' | 'setup' | 'active_pilot' | 'ending_soon' | 'completed' | 'converted' | 'expired';
+
 export interface Society {
   id: string;
   name: string;
@@ -21,6 +23,11 @@ export interface Society {
   floors: number;
   facilities: string[];
   setup_completed: number;
+  occupancy_estimate?: number | null;
+  pilot_start_date?: string | null;
+  pilot_end_date?: string | null;
+  pilot_status?: PilotStatus;
+  is_demo?: number;
   created_at?: string;
 }
 
@@ -50,13 +57,52 @@ export interface Bill {
   fixed_charges: number;
   energy_charges: number;
   other_charges: number;
+  previous_reading?: number | null;
+  current_reading?: number | null;
+  billing_days?: number | null;
   due_date?: string | null;
   file_url?: string | null;
   file_name?: string | null;
+  extraction_confidence?: 'low' | 'medium' | 'high' | null;
+  verification_status?: 'verified' | 'needs_review' | 'unverified';
   verified: number;
   verified_by?: string | null;
+  verified_date?: string | null;
   notes?: string | null;
   created_at: string;
+}
+
+export interface DataQualityIssue {
+  type: 'missing_month' | 'duplicate_period' | 'spike' | 'unverified' | 'invalid_value' | 'missing_field';
+  severity: 'high' | 'medium' | 'low';
+  period?: string;
+  message: string;
+  actionableHint: string;
+}
+
+export interface DataQualityReport {
+  status: 'good' | 'needs_review' | 'insufficient';
+  score: number;
+  coverageMonths: number;
+  verifiedBills: number;
+  totalBills: number;
+  missingMonths: string[];
+  warnings: string[];
+  issues: DataQualityIssue[];
+  duplicateCount: number;
+}
+
+export interface BaselineResult {
+  status: 'not_established' | 'preliminary' | 'established';
+  periodStart: string | null;
+  periodEnd: string | null;
+  avgMonthlyKwh: number;
+  avgMonthlyBill: number;
+  totalConsumptionKwh: number;
+  verifiedMonthsCount: number;
+  quality: 'good' | 'needs_review' | 'insufficient';
+  message: string;
+  recommendation: string;
 }
 
 export interface AnalyticsSummary {
@@ -78,6 +124,7 @@ export interface AnalyticsSummary {
   costPerKwh: number;
   consumptionPerApartment: number;
   costPerApartment: number;
+  consumptionPerBuilding: number;
   potentialSavings: number;
   measuredSavings: number;
   energyScore: number;
@@ -94,6 +141,46 @@ export interface AnalyticsSummary {
     billAmount: number;
     costPerKwh: number;
   }>;
+  dataQuality: DataQualityReport;
+  baseline: BaselineResult;
+  profile: {
+    peakMonth: { period: string; units_kwh: number; bill_amount: number } | null;
+    lowestMonth: { period: string; units_kwh: number; bill_amount: number } | null;
+    medianConsumptionKwh: number;
+    rolling3MonthAvgKwh: number;
+  };
+}
+
+export interface PilotScorecardData {
+  societyName: string;
+  pilotStatus: PilotStatus;
+  startDate: string;
+  endDate: string;
+  daysTotal: number;
+  daysElapsed: number;
+  daysRemaining: number;
+  dataCoverageMonths: number;
+  baselineStatus: 'not_established' | 'preliminary' | 'established';
+  baselineAvgKwh: number;
+  dataQualityStatus: 'good' | 'needs_review' | 'insufficient';
+  consumptionTrendPercent: number;
+  billTrendPercent: number;
+  potentialSavingsMonthly: number;
+  recordedSavingsTotal: number;
+  actionsCompleted: number;
+  recommendationsOpen: number;
+  energyScore: number;
+  pilotHealthScore: number;
+}
+
+export interface EnergyAnomaly {
+  id: string;
+  severity: 'high' | 'medium' | 'low';
+  period: string;
+  observed: string;
+  changePercent: number;
+  possibleExplanations: string[];
+  recommendedChecks: string[];
 }
 
 export interface CategoryBreakdown {
@@ -109,7 +196,7 @@ export interface CategoryBreakdown {
 }
 
 export type Priority = 'high' | 'medium' | 'low';
-export type RecommendationStatus = 'not_started' | 'in_progress' | 'completed';
+export type RecommendationStatus = 'new' | 'assigned' | 'not_started' | 'in_progress' | 'completed' | 'dismissed';
 
 export interface Recommendation {
   id: string;
@@ -118,12 +205,34 @@ export interface Recommendation {
   description: string;
   reason: string;
   suggested_action: string;
+  problem_observed?: string | null;
+  evidence?: string | null;
+  suggested_investigation?: string | null;
+  potential_impact?: string | null;
+  confidence?: 'low' | 'medium' | 'high';
   priority: Priority;
   estimated_savings: number;
   estimated_savings_max?: number;
   estimated_savings_label?: string;
+  potential_savings_kwh?: number;
+  potential_savings_inr?: number;
+  assigned_to?: string | null;
+  due_date?: string | null;
   status: RecommendationStatus;
   category: string;
+  created_at: string;
+}
+
+export interface PilotRequest {
+  id: string;
+  name: string;
+  society_name: string;
+  email: string;
+  phone: string;
+  city: string;
+  apartments: number;
+  message?: string | null;
+  status: 'new' | 'contacted' | 'pilot_started' | 'converted' | 'closed';
   created_at: string;
 }
 
@@ -135,10 +244,20 @@ export interface Action {
   recommendation_priority?: string | null;
   action_taken: string;
   action_date: string;
+  person_responsible?: string | null;
   notes?: string | null;
+  previous_condition?: string | null;
+  new_condition?: string | null;
   before_consumption?: number | null;
   after_consumption?: number | null;
+  measurement_period?: string | null;
+  baseline_reference_kwh?: number | null;
+  post_action_average_kwh?: number | null;
+  observed_reduction_kwh?: number | null;
+  observed_reduction_percent?: number | null;
   measured_savings?: number | null;
+  savings_confidence?: 'low' | 'medium' | 'high' | null;
+  methodology?: string | null;
   created_by?: string | null;
   created_at: string;
 }
@@ -172,7 +291,7 @@ export interface NotificationItem {
   user_id?: string | null;
   title: string;
   message: string;
-  type: 'bill_verification' | 'bill_uploaded' | 'unusual_consumption' | 'ai_insight' | 'recommendation' | 'report_ready';
+  type: 'bill_verification' | 'bill_uploaded' | 'unusual_consumption' | 'ai_insight' | 'recommendation' | 'report_ready' | 'pilot_ending_soon' | 'action_completed';
   read: number;
   link?: string | null;
   created_at: string;
@@ -208,23 +327,42 @@ export interface AIInsight {
   summary: string;
   observations: string[];
   possible_causes: string[];
+  recommended_checks?: string[];
   recommendations: string[];
   confidence: 'low' | 'medium' | 'high';
+  data_limitations?: string[];
   disclaimer: string;
   created_at: string;
 }
 
-export interface PilotRequest {
+export interface AuditLog {
   id: string;
-  name: string;
-  society_name: string;
-  email: string;
-  phone: string;
-  city: string;
-  apartments: number;
-  message?: string | null;
-  status: 'new' | 'contacted' | 'pilot_started' | 'converted' | 'closed';
-  notes?: string | null;
+  society_id: string;
+  user_id: string;
+  user_name?: string | null;
+  user_email?: string | null;
+  event_type: string;
+  entity_type: string;
+  entity_id?: string | null;
+  metadata?: any;
   created_at: string;
 }
 
+export interface PilotConversionSummary {
+  societyName: string;
+  city: string;
+  apartments: number;
+  pilotDurationDays: number;
+  dataCoverageMonths: number;
+  totalKwhAnalyzed: number;
+  totalBillSpent: number;
+  baselineAvgMonthlyKwh: number;
+  consumptionTrendPercent: number;
+  completedActionsCount: number;
+  totalRecordedReductionKwh: number;
+  totalRecordedRupeeSavings: number;
+  potentialOpportunityMonthly: number;
+  wattwiseEnergyScore: number;
+  dataQualityStatus: string;
+  methodologyNote: string;
+}

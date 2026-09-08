@@ -18,7 +18,7 @@ export const db = new DatabaseSync(DB_PATH);
 db.exec('PRAGMA foreign_keys = ON;');
 db.exec('PRAGMA journal_mode = WAL;');
 
-// Initialize schema
+// Initialize schema and safe migrations
 export function initializeDatabase() {
   let schemaPath = path.join(__dirname, 'schema.sql');
   if (!fs.existsSync(schemaPath)) {
@@ -28,6 +28,55 @@ export function initializeDatabase() {
     const schemaSql = fs.readFileSync(schemaPath, 'utf8');
     db.exec(schemaSql);
   }
+
+  // Safe migration additions for SQLite tables
+  const safeAddColumn = (table: string, columnDef: string) => {
+    try {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${columnDef};`);
+    } catch {
+      // Column already exists
+    }
+  };
+
+  // Societies
+  safeAddColumn('societies', 'occupancy_estimate INTEGER DEFAULT 85');
+  safeAddColumn('societies', 'pilot_start_date TEXT');
+  safeAddColumn('societies', 'pilot_end_date TEXT');
+  safeAddColumn('societies', 'pilot_status TEXT DEFAULT "active_pilot"');
+  safeAddColumn('societies', 'is_demo INTEGER DEFAULT 0');
+
+  // Bills
+  safeAddColumn('bills', 'previous_reading REAL');
+  safeAddColumn('bills', 'current_reading REAL');
+  safeAddColumn('bills', 'billing_days INTEGER');
+  safeAddColumn('bills', 'extraction_confidence TEXT DEFAULT "high"');
+  safeAddColumn('bills', 'verification_status TEXT DEFAULT "verified"');
+  safeAddColumn('bills', 'verified_date TEXT');
+
+  // Recommendations
+  safeAddColumn('recommendations', 'problem_observed TEXT');
+  safeAddColumn('recommendations', 'evidence TEXT');
+  safeAddColumn('recommendations', 'suggested_investigation TEXT');
+  safeAddColumn('recommendations', 'potential_impact TEXT');
+  safeAddColumn('recommendations', 'confidence TEXT DEFAULT "medium"');
+  safeAddColumn('recommendations', 'assigned_to TEXT');
+  safeAddColumn('recommendations', 'due_date TEXT');
+
+  // Actions
+  safeAddColumn('actions', 'person_responsible TEXT');
+  safeAddColumn('actions', 'previous_condition TEXT');
+  safeAddColumn('actions', 'new_condition TEXT');
+  safeAddColumn('actions', 'measurement_period TEXT');
+  safeAddColumn('actions', 'baseline_reference_kwh REAL');
+  safeAddColumn('actions', 'post_action_average_kwh REAL');
+  safeAddColumn('actions', 'observed_reduction_kwh REAL');
+  safeAddColumn('actions', 'observed_reduction_percent REAL');
+  safeAddColumn('actions', 'savings_confidence TEXT DEFAULT "medium"');
+  safeAddColumn('actions', 'methodology TEXT');
+
+  // AI Insights
+  safeAddColumn('ai_insights', 'recommended_checks TEXT DEFAULT "[]"');
+  safeAddColumn('ai_insights', 'data_limitations TEXT DEFAULT "[]"');
 }
 
 // Database helper functions with typed outputs

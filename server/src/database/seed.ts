@@ -8,7 +8,8 @@ export function seedDatabase() {
   // Check if Green Valley already exists
   const existingSociety = queryOne('SELECT id FROM societies WHERE name = ?', ['Green Valley Residency']);
   if (existingSociety) {
-    console.log('Database already seeded. Skipping initial seed.');
+    seedPhase2PilotData();
+    console.log('Database already seeded. Phase 2 pilot attributes verified.');
     return;
   }
 
@@ -314,7 +315,95 @@ export function seedDatabase() {
     );
   }
 
+  seedPhase2PilotData();
+
   console.log('Seed completed successfully! Demo data is ready.');
+}
+
+function seedPhase2PilotData() {
+  const societyId = 'soc-green-valley-01';
+
+  // 1. Update society with pilot timeline
+  execute(
+    `UPDATE societies 
+     SET occupancy_estimate = 92, 
+         pilot_start_date = '2026-01-01', 
+         pilot_end_date = '2026-03-31', 
+         pilot_status = 'active_pilot', 
+         is_demo = 1
+     WHERE id = ?`,
+    [societyId]
+  );
+
+  // 2. Ensure baseline table record exists
+  const existingBaseline = queryOne('SELECT id FROM baselines WHERE society_id = ?', [societyId]);
+  if (!existingBaseline) {
+    execute(
+      `INSERT INTO baselines (id, society_id, period_start, period_end, avg_monthly_kwh, avg_monthly_bill, verified_months_count, quality, status)
+       VALUES ('base-green-valley', ?, '2025-10', '2026-03', 18950, 145000, 6, 'good', 'established')`,
+      [societyId]
+    );
+  }
+
+  // 3. Update recommendations with assignee, due dates, and problem evidence
+  execute(
+    `UPDATE recommendations 
+     SET problem_observed = 'Water pump running cycles extend into morning peak tariff hours without automatic shutoff.',
+         evidence = 'Sub-meter telemetry indicates pump consumption constitutes ~33% of total common-area power.',
+         suggested_investigation = 'Inspect mechanical timer calibration and float switch threshold settings in underground sump.',
+         potential_impact = 'Estimated potential reduction of 900–1,200 kWh/month (~₹8,000/mo).',
+         confidence = 'high',
+         assigned_to = 'Suresh K. (Facility Lead)',
+         due_date = '2026-03-25',
+         status = 'in_progress'
+     WHERE society_id = ? AND title LIKE '%Pump%'`,
+    [societyId]
+  );
+
+  execute(
+    `UPDATE recommendations 
+     SET problem_observed = 'Basement parking halogen and CFL fixtures remain energized 24/7 with zero occupancy sensing.',
+         evidence = 'Lighting circuits draw continuous 4.2 kW steady load day and night.',
+         suggested_investigation = 'Audit perimeter motion sensors and evaluate zoned 50% bi-level LED dimming.',
+         potential_impact = 'Estimated potential reduction of 600–800 kWh/month (~₹5,000/mo).',
+         confidence = 'high',
+         assigned_to = 'Rajesh Kumar (President)',
+         due_date = '2026-03-28',
+         status = 'assigned'
+     WHERE society_id = ? AND title LIKE '%LED%'`,
+    [societyId]
+  );
+
+  // 4. Update actions with previous and new conditions
+  execute(
+    `UPDATE actions 
+     SET person_responsible = 'Suresh K. (Facility Lead)',
+         previous_condition = 'Pumps operated on manual switch (approx 6.5 hours/day).',
+         new_condition = 'Digital astronomical timer relay installed with automated float control (4.5 hours/day).',
+         measurement_period = '2026-03 Post-Action Follow-up',
+         baseline_reference_kwh = 20200,
+         post_action_average_kwh = 18420,
+         observed_reduction_kwh = 1780,
+         observed_reduction_percent = 8.8,
+         measured_savings = 13884,
+         savings_confidence = 'high',
+         methodology = 'Recorded savings are calculated from verified post-action consumption compared with the selected baseline. This comparison does not establish causality.'
+     WHERE society_id = ?`,
+    [societyId]
+  );
+
+  // 5. Seed audit logs
+  const existingAudit = queryOne('SELECT id FROM audit_logs WHERE society_id = ?', [societyId]);
+  if (!existingAudit) {
+    execute(
+      `INSERT INTO audit_logs (id, society_id, user_id, event_type, entity_type, entity_id, metadata, created_at)
+       VALUES 
+       ('audit-demo-01', ?, 'user-society-admin-01', 'society_created', 'society', ?, '{"name":"Green Valley Residency","units":240}', '2026-01-01 10:00:00'),
+       ('audit-demo-02', ?, 'user-society-admin-01', 'bill_verified', 'bill', 'bill-demo-006', '{"period":"2026-03","units":18420,"amount":142380}', '2026-03-05 14:30:00'),
+       ('audit-demo-03', ?, 'user-committee-member-01', 'action_completed', 'action', 'action-demo-01', '{"action":"Digital Astronomical Relay on Pumps","observed_reduction_kwh":1780}', '2026-03-08 11:15:00')`,
+      [societyId, societyId, societyId, societyId]
+    );
+  }
 }
 
 // If invoked directly via CLI

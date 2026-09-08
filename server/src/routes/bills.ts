@@ -8,6 +8,7 @@ import { AuthenticatedRequest, authenticateToken, requireRole, getAuthorizedSoci
 import { extractDataFromBillText, parseCsvContent } from '../services/billParser.js';
 import { config } from '../config/index.js';
 import { Bill } from '../types/index.js';
+import { logAuditEvent } from '../services/audit.js';
 
 export const billsRouter = Router();
 
@@ -126,6 +127,65 @@ billsRouter.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res
     res.json(bill);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve bill record.' });
+  }
+});
+
+// 1.2 Check for duplicate bill before saving (Requirement 8)
+billsRouter.post('/check-duplicate', authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const societyId = getAuthorizedSocietyId(req);
+    const { meter_id, billing_period, units_kwh, bill_amount } = req.body;
+
+    if (!billing_period) {
+      res.json({ isDuplicate: false });
+      return;
+    }
+
+    const existing = queryOne<Bill>(
+      `SELECT id, billing_period, units_kwh, bill_amount, verified 
+       FROM bills 
+       WHERE society_id = ? AND billing_period = ? ${meter_id ? 'AND meter_id = ?' : ''}`,
+      meter_id ? [societyId, billing_period.trim(), meter_id] : [societyId, billing_period.trim()]
+    );
+
+    if (existing) {
+      res.json({
+        isDuplicate: true,
+        existingBill: existing,
+        message: `A bill for this meter and billing period (${billing_period}) already exists (${existing.units_kwh.toLocaleString()} kWh, ₹${existing.bill_amount.toLocaleString()}).`
+      });
+    } else {
+      res.json({ isDuplicate: false });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to check duplicate bill.' });
+  }
+});
+
+// 1.3 Export Bills as CSV (Requirement 68)
+billsRouter.get('/export/csv', authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const societyId = getAuthorizedSocietyId(req);
+    const bills = query<any>(
+      `SELECT b.billing_period, m.name as meter_name, m.meter_number, b.units_kwh, b.bill_amount, 
+              b.fixed_charges, b.energy_charges, b.verified, b.verified_by, b.created_at
+       FROM bills b
+       LEFT JOIN meters m ON b.meter_id = m.id
+       WHERE b.society_id = ?
+       ORDER BY b.billing_period DESC`,
+      [societyId]
+    );
+
+    let csv = 'Billing Period,Meter Name,Meter Number,Units (kWh),Bill Amount (INR),Fixed Charges (INR),Energy Charges (INR),Verified,Verified By,Date Added\n';
+    bills.forEach((b: any) => {
+      csv += `"${b.billing_period}","${b.meter_name || 'Main Meter'}","${b.meter_number || 'N/A'}",${b.units_kwh},${b.bill_amount},${b.fixed_charges || 0},${b.energy_charges || 0},"${b.verified ? 'Yes' : 'No'}","${b.verified_by || 'Admin'}","${b.created_at}"\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="wattwise-bills-${Date.now()}.csv"`);
+    res.status(200).send(csv);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to export CSV.' });
   }
 });
 
@@ -417,19 +477,93 @@ billsRouter.post('/import-csv', authenticateToken, requireRole('society_admin', 
   }
 });
 
+// 5.1 Edit bill with audit logging (Requirement 44)
+billsRouter.put('/:id', authenticateToken, requireRole('society_admin'), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const societyId = getAuthorizedSocietyId(req);
+    const { id } = req.params;
+    const { units_kwh, bill_amount, fixed_charges, energy_charges, reason } = req.body;
+
+    const existing = queryOne<Bill>('SELECT * FROM bills WHERE id = ? AND society_id = ?', [id, societyId]);
+    if (!existing) {
+      res.status(404).json({ error: 'Bill record not found.' });
+      return;
+    }
+
+    const newUnits = units_kwh !== undefined ? parseFloat(units_kwh) : existing.units_kwh;
+    const newAmount = bill_amount !== undefined ? parseFloat(bill_amount) : existing.bill_amount;
+
+    if (isNaN(newUnits) || newUnits <= 0 || isNaN(newAmount) || newAmount <= 0) {
+      res.status(400).json({ error: 'Units and amount must be positive numbers.' });
+      return;
+    }
+
+    execute(
+      `UPDATE bills 
+       SET units_kwh = ?, bill_amount = ?, fixed_charges = ?, energy_charges = ?, updated_at = datetime('now')
+       WHERE id = ? AND society_id = ?`,
+      [
+        newUnits,
+        newAmount,
+        fixed_charges !== undefined ? parseFloat(fixed_charges) : existing.fixed_charges,
+        energy_charges !== undefined ? parseFloat(energy_charges) : existing.energy_charges,
+        id,
+        societyId
+      ]
+    );
+
+    // Audit log edit (Requirement 44)
+    logAuditEvent({
+      societyId,
+      userId: req.user!.userId,
+      eventType: 'bill_edited',
+      entityType: 'bill',
+      entityId: id,
+      metadata: {
+        billing_period: existing.billing_period,
+        previous_units_kwh: existing.units_kwh,
+        new_units_kwh: newUnits,
+        previous_bill_amount: existing.bill_amount,
+        new_bill_amount: newAmount,
+        reason: reason || 'Routine tariff reconciliation'
+      }
+    });
+
+    const updated = queryOne<Bill>('SELECT * FROM bills WHERE id = ?', [id]);
+    res.json({ message: 'Bill updated successfully.', bill: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update bill.' });
+  }
+});
+
 // 6. Delete bill (Society Admin only)
 billsRouter.delete('/:id', authenticateToken, requireRole('society_admin'), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const societyId = getAuthorizedSocietyId(req);
     const { id } = req.params;
 
-    const existing = queryOne('SELECT id FROM bills WHERE id = ? AND society_id = ?', [id, societyId]);
+    const existing = queryOne<Bill>('SELECT * FROM bills WHERE id = ? AND society_id = ?', [id, societyId]);
     if (!existing) {
       res.status(404).json({ error: 'Bill record not found.' });
       return;
     }
 
     execute('DELETE FROM bills WHERE id = ? AND society_id = ?', [id, societyId]);
+
+    // Audit log deletion
+    logAuditEvent({
+      societyId,
+      userId: req.user!.userId,
+      eventType: 'bill_deleted',
+      entityType: 'bill',
+      entityId: id,
+      metadata: {
+        billing_period: existing.billing_period,
+        units_kwh: existing.units_kwh,
+        bill_amount: existing.bill_amount
+      }
+    });
+
     res.json({ message: 'Bill removed successfully.' });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to delete bill.' });

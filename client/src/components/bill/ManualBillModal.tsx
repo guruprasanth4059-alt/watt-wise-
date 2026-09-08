@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { Meter } from '../../types';
+import { api } from '../../api/client';
 
 interface ManualBillModalProps {
   isOpen: boolean;
@@ -28,6 +29,32 @@ export const ManualBillModal: React.FC<ManualBillModalProps> = ({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+
+  // Check duplicate bill when billing_period or meter_id changes
+  useEffect(() => {
+    if (!formData.billing_period || !formData.meter_id) {
+      setDuplicateWarning(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.post<{ isDuplicate: boolean; message: string; existingBill?: any }>('/bills/check-duplicate', {
+          meter_id: formData.meter_id,
+          billing_period: formData.billing_period
+        });
+        if (res.isDuplicate) {
+          setDuplicateWarning(`Warning: ${res.message}. Adding another bill will record a secondary entry.`);
+        } else {
+          setDuplicateWarning(null);
+        }
+      } catch (err) {
+        // Silently ignore check errors
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [formData.billing_period, formData.meter_id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -81,6 +108,13 @@ export const ManualBillModal: React.FC<ManualBillModalProps> = ({
         {errorMessage && (
           <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg">
             {errorMessage}
+          </div>
+        )}
+
+        {duplicateWarning && (
+          <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg flex items-start gap-2">
+            <span className="font-bold">⚠️</span>
+            <span>{duplicateWarning}</span>
           </div>
         )}
 
